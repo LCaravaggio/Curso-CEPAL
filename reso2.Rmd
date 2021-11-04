@@ -1,0 +1,94 @@
+---
+title: "resolucion ejercicio 2"
+author: "Victoria ODonnell"
+date: "8/20/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+Abro las bases de datos           
+
+```{r}
+
+personas2018 <- read.csv("personas_2018.csv", sep = ";")
+disciplina <- read.csv("ref_disciplina.csv", sep = ";", encoding = "UTF-8")
+sexo <- read.csv2("ref_sexo.csv", encoding = "UTF-8")
+
+
+
+```
+
+Joins
+
+```{r}
+
+personas_ref <- personas2018 %>% 
+  left_join(sexo, by = "sexo_id") %>% 
+  left_join(disciplina, by = c("disciplina_maximo_grado_academico_id" = "disciplina_id"))
+
+
+```
+
+Cantidad por sexo
+
+```{r}
+
+personas_ref_agrupado <- personas_ref %>% 
+  group_by(sexo_descripcion) %>% 
+  summarise(total = n(),
+            max = max(edad == 23),
+            media = mean(edad, na.rm = T))
+
+
+personas_ref_agrupado
+
+
+table(personas_ref$sexo_descripcion)
+
+
+personas_varon <- personas2018 %>% 
+  filter(sexo_id == 2) 
+  
+
+dim(personas_varon)
+
+
+
+```
+```{r}
+
+length(unique(personas_ref$gran_area_descripcion))
+
+
+```
+```{r}
+
+personas_ref_agrupado <- personas_ref %>% 
+  group_by(sexo_descripcion) %>% 
+  summarise(total = n(),
+            publi2 = sum(producciones_ult_2_anios)) %>% 
+  ungroup()
+
+
+porcentaje_sexo <- personas_ref_agrupado %>% 
+  filter(publi2 > 0) %>% 
+  mutate(porcentaje_publi2 = round(publi2 / sum(publi2) * 100, 3)) %>% 
+  pull(porcentaje_publi2)
+  
+
+porcentaje_sexo
+
+
+summary(personas2018$producciones_ult_2_anios)
+
+
+```
+
+
+

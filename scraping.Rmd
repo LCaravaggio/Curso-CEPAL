@@ -1,0 +1,331 @@
+---
+title: Introducción al _scraping_
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: cosmo
+    highlight: tango
+date: "Septiembre de 2020"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=T, fig.width=15)
+library(tidyverse)
+library(glue)
+
+library(curl)
+library(httr)
+library(rvest)
+```
+
+## R y la World Wide Web
+
+En esta clase vamos a introducir formas de interactuar con la web -- esto es, descargar y subir datos a la *world wide web*. En particular vamos a enfocarnos en la **descarga** de datos, pero R tiene muchas herramientas para trabajar con el _envío_ de datos también.
+
+La forma más sencilla de hacer esta tarea es *click derecho --> descargar*. Esto nos puede servir para trabajar con un archivo de texto disponible en un link, por ejemplo.
+
+![Fuente: elaboración propia](img/click-descargar.png)
+Esta tarea se puede hacer desde R o desde una terminal desde el sistema operativo, e incluso programarla para realizarla múltiples veces sobre múltiples archivos. Por ejemplo:
+
+```{r}
+# obtenemos el link del archivo en:
+# https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-9-48
+
+# luego lo descargamos:
+ruta_file = 
+  "https://www.indec.gob.ar/ftp/cuadros/economia/sh_emae_mensual_base2004.xls"
+ruta_destination = "data/datos_emae.xls"
+curl::curl_download(url = ruta_file, destfile=ruta_destination)
+```
+
+Sin embargo, ¡no toda la información relevante está disponible en links de descarga! Es en este contexto donde necesitamos otro tipo de herramientas.  
+
+## APIs
+
+Muchas veces las soluciones son más sencillas que lo que creemos. Cuando queremos levantar data de la web, lo primero que hay que preguntarse es si hay una **API** que lo facilite. Una **API web** (Application Programming Interface) es una interfaz que describe el tipo de pedidos (*requests*) que podemos hacer a un servidor web y el tipo de resultados (*output*) que debemos obtener.
+
+Muchos sitios web usan APIs para disponibilizar sus datos de forma tal que se puedan extraer de forma controlada, ordenada y escalable. Siempre es necesario consultar la **documentación** de las APIs para saber cómo ejecutar las requests desde nuestro sistema operativo o desde un navegador web.
+
+Un ejemplo de API muy popular es la [API de Twitter](https://developer.twitter.com/en/docs/tweets/search/api-reference). Twitter ofrece múltiples APIs para consultar datos de tweets y usuarios. La advertencia es que no todo es gratis: cuánta más y mejor información querramos, más vamos a tener que pagar. 
+
+Algunas APIs son tan populares que se han desarrollado librerías para poder usarlas con más comodidad. Estas librerías ofrecen funciones _wrappers_ que envuelven las consultas que se envían a los servidores. Por ejemplo, para la API de Twitter se ha desarrollado [`rtweet`](https://rtweet.info/) para R y [`tweepy`](http://docs.tweepy.org/en/latest/) para Python. 
+
+En [ROpenSci](https://ropensci.org/packages/) se puede acceder a una lista muy completa de paquetes en R que disponibilizan datos web.
+
+### Un ejemplo simple
+
+La librería `httr` es la más popular para trabajar de forma génerica con URLs y los principales verbos de HTTP (el protocolo de comunicación de la web).  
+
+Veamos cómo podemos extraer datos de películas de forma programática usando la API [OMDb](http://www.omdbapi.com/). La condición necesaria ineludible para empezar es consultar [la documentación de la API](http://www.omdbapi.com/#parameters) para conocer los **parámetros del request**. En muchos casos también es necesario [generar una clave](http://www.omdbapi.com/apikey.aspx) para autenticarse.  
+
+```{r}
+url_principal = "http://www.omdbapi.com/"
+omdb_key = read_file("data/omdb_key.txt")
+peli_response = httr::GET(
+  url_principal
+  ,query = list(t="Jumanji", y=1995, plot="short", r="json", apikey=omdb_key)
+)
+peli_content = httr::content(peli_response)
+
+print( str(peli_content, max.level=1) )
+```
+
+También podríamos generar la URL del request con una función y usar este URL como el argumento `url` de `httr::GET()`. Por ejemplo: 
+
+```{r}
+# funcion para escribir la request
+omdb_request = function(title, year, plot, format, api_key) {
+  glue::glue("http://www.omdbapi.com/?t={title}&y={year}&plot={plot}&r={format}&apikey={api_key}")
+}
+# ejecutamos el request
+peli_request = omdb_request(title="Jumanji", year=1995, plot="short", format="json"
+                       ,api_key=omdb_key) 
+peli_response = httr::GET(peli_request)
+```
+
+Una buena práctica antes de realizar requests de esta manera, es verificar si existen librerías que faciliten el uso de la API -- en este caso, podríamos haber evaluado si la librería [ombdapi](https://github.com/hrbrmstr/omdbapi) nos sirve.  
+
+## Scraping
+
+Cuando los datos no están disponibles ni en un link online ni en una API podemos leerlos mediante lo que se conoce como **_web scraping_** (o "raspado de la web"...). Esto consiste en usar programas que aprovechen la **estructura de tipo árbol** de los sitios web -- y más generalmente, la **red mediada por hipervínculos** que conforman todos los sitios -- para obtener la información que nos interesa. 
+
+### HTML
+
+La mayor parte de los sitios web por los que navegamos están escritos en **HTML** (_HyperText Markup Language_). HTML no es otra cosa que una forma estructurada de presentar datos. Por ejemplo, la versión final de este documento es HTML. Podemos decir entonces que 'scrapear', en su versión más simple, equivale a **extraer datos de documentos HTML**.
+
+Un ejemplo de un HTML básico es:
+
+![Fuente: https://rvest.tidyverse.org/](img/harvesting-web-1-s.png)
+
+Para visualizar el HTML de un sitio web, podemos hacer _click derecho --> Inspect_ o _click derecho --> Ver código fuente_.
+
+#### Tags
+
+Los componentes fundamentales de los HTML son los **tags**, que tienen el siguiente formato:
+
+`<tagname> un poco de texto </tagname>`
+
+Los sitios webs se construyen mediante el uso de tags en una estructura de tipo árbol. El nombre del tag indica el rol del contenido y la forma en la que va a ser visualizado por el usuario. Algunos tags populares son:
+
+* `<title></title>` (título)
+* `<h1></h1>` (encabezado)
+* `<p></p>` (párrafo)
+* `<div></div>` (división o container)
+* etc. 
+
+#### Atributos
+
+En general los elementos HTML tienen atributos para identificarlos. Los dos más comunes son `id` y `class`. 
+
+Un **`id`** se puede usar únicamente para un elemento, mientras el nombre de una **`class`** se puede usar para muchos elementos. 
+
+Por ejemplo:
+
+![Fuente: https://www.w3schools.com/html/html_id.asp](img/html_id-class.png)
+
+### CSS
+
+_Cascading Style Sheets_ (CSS) es el nombre del lenguaje que define el **diseño visual de los documentos HTML**. CSS es particularmente de interés para el scraping por sus **selectores**. 
+
+Los selectores se usan en el contexto de CSS para definir a qué tags HTML se aplican los estilos visuales. En el contexto del _web scraping_ los usamos para definir, de forma precisa y flexible, **qué datos queremos extraer**.
+
+Las reglas elementales para escribir selectores CSS son las siguientes:
+
+* Los tags con nombre `x` se seleccionan con: `x`  
+* Los tags con `id='x'` se seleccionan con: `#x`  
+* Los tags con `class='x'` se seleccionan con: `.x`  
+* Para seleccionar un tag `y` adentro de otro tag `x` en cualquier nivel de profundidad (_descendant_), se usa: `x y`
+* Para seleccionar un tag `y` adentro de otro tag `x` en primer nivel de profundidad (_child_), se usa: `x > y`
+* Para seleccionar un tag `y` que sigue inmediatamente a otro tag `x`, se usa: `x+ y`
+* Para seleccionar un tag `x` que sea el n-ésimo _hijo_ de su _padre_, se usa: `x:nth-child(n)` 
+* Para seleccionar tags con determinado atributo y/o valor, se usa: `[attribute]`, `tag[attribute]` o `[attribute = "value"]`.
+* Se pueden sumar selectores usando la coma "`,`": `x , y , z`, por ejemplo.
+
+Podemos ver una descripción detallada de la sintaxis de selectores en [el tutorial de w3schools](https://www.w3schools.com/css/css_selectors.asp).  
+
+La extensión para navegadores web [_SelectorGadget_](https://chrome.google.com/webstore/detail/selectorgadget/mhjhnkcfbdhnjickkkdbjoemdmbfginb?hl=es) es muy útil para encontrar el selector que extrae los datos que necesitamos. En [este tutorial](https://cran.r-project.org/web/packages/rvest/vignettes/selectorgadget.html) se explica con detalle cómo se usa. 
+
+Veamos un ejemplo con [las noticias más leídas del diario colombiano El Tiempo el 8/9/2020](https://web.archive.org/web/20200908232836/https://www.eltiempo.com/noticias-mas-leidas). 
+
+### rvest
+
+Existen innumerables librerías de scraping para innumerables lenguajes, cada una con sus ventajas y desventajas. En este curso vamos a trabajar con [`rvest`](https://rvest.tidyverse.org/).
+
+Las funciones fundamentales para usar `rvest` son:
+
+- `read_html()`: lectura de un HTML
+- `html_nodes()`: selecciona de un set de tags
+- `html_name()`: extrae nombre del tag
+- `html_text()`: extrae el texto de un tag
+- `html_attrs()`: extrae los atributos de un set de tags
+- `html_table()`: convierte un tag de tipo `table` en un `data.frame`
+
+La estructura general para _parsear_ HTML con `rvest` es:
+
+```
+url %>% 
+  read_html() %>% 
+  html_nodes(<CSS>) %>% 
+  html_attr() OR html_text()
+```
+
+Sigamos con el ejemplo de _El Tiempo_. Vamos a extraer los títulos de las notas más leídas:
+
+```{r}
+# definimos la URL
+url = "https://web.archive.org/web/20200908232836/
+https://www.eltiempo.com/noticias-mas-leidas" %>% str_remove_all("\n")
+# definimos los nodos relevantes con CSS
+selector = ".titulo"
+# leemos el HTML
+html = read_html(url)
+# extraemos los nodos
+nodos = html_nodes(html, selector)
+# extraemos el texto
+titulos = html_text(nodos, trim=T)
+
+print( length(nodos) )
+print( nodos[1:3] )
+print( titulos[1:3] )
+```
+
+En general se necesitan varias iteraciones para llegar al resultado que queremos. **SelectorGadget** puede ser muy útil para reducir la cantidad de estas iteraciones.
+
+### Web crawlers {#crawling}
+
+Muchas veces no nos interesan los datos una única URL, sino los de muchas URLs con una estrucura o patrón en común -- por ejemplo, todas las notas de un diario con una determinada palabra clave, o los precios de todas las propiedades de una determinada zona geográfica. 
+
+Este tipo de tarea es una versión muy básica de lo que se conoce como **_web crawling_**: programas que recorren múltiples sitios de la web siguiendo hipervínculos de forma automatizada y sistemática.  
+
+En este caso podemos abordar el problema de la siguiente forma general:
+
+1. Escribir una función que extraiga los datos de una página particular 
+2. Reunir todos los links de las páginas con la información que buscamos
+3. Aplicar la función del punto 1 al documento HTML de cada link de 2
+
+Veamos cómo podemos extraer los párrafos del cuerpo de cada artículo de los más leídos de _El Tiempo_:
+
+```{r}
+# 1. funcion que extrae parrafos de un articulo
+extrae_parrafos = function(url) {
+  html = read_html(url)
+  selector = ".modulos .contenido"
+  parrafos = html_nodes(html, selector) %>% html_text(trim=T)
+  return(parrafos)
+}
+
+# 2. extraemos URLs del sitio principal con una funcion
+extrae_links = function(url) {
+  html = read_html(url)
+  selector = ".titulo"
+  links = html_nodes(html, selector) %>% html_attr(name="href")
+  # conservamos la URL verdadera (archive no guardó todos los outlinks)
+  links_ok = str_remove(links, "\\/web\\/\\d+\\/")
+  return(links_ok)
+}
+url_principal = "https://web.archive.org/web/20200908232836/
+https://www.eltiempo.com/noticias-mas-leidas" %>% str_remove_all("\n")
+links_notas = extrae_links(url_principal)
+
+# 3. aplicamos fn 1 a los links
+cuerpos = list()
+for (link in links_notas) {
+  cuerpos[[link]] = extrae_parrafos(link)
+}
+
+print( head(links_notas, 3) )
+print( head(names(cuerpos), 3) )
+print( length(cuerpos) ) # nro de notas
+for (parrafos in cuerpos) cat(length(parrafos), "- ") # nro de parrafos por nota
+print( cuerpos[[1]][1] ) # primer parrafo de la 1ra nota
+```
+
+```{r, include=F}
+# guardamos los datos para usarlos mas adelante
+textos = map_chr(cuerpos, function(x) paste0(x, collapse=" ")) %>% 
+  unname()
+dat = tibble(titulo = titulos, texto = textos)
+write_csv(dat, glue("notas_eltiempo-{Sys.Date()}.csv"))
+```
+
+### Extensiones
+
+#### XPath
+
+Si bien los selectores CSS son muy prácticos y fáciles de interpretar, a veces no nos sirven para resolver algunas extracciones de datos. En estos casos podemos recurrir a los selectores [**XPath**](https://www.w3schools.com/xml/xpath_syntax.asp), que tienen una sintaxis menos intuitiva pero son más potentes. Esto se debe, por ejemplo, a que pueden especificar directamente los atributos a extraer (como lo hacemos con las funciones de `rvest`), entre muchas otras funcionalidades.   
+
+#### Crawling con `rvest`
+
+A veces en la "etapa 2" del [crawling](#crawling) no es posible reunir todos los links de una sola vez -- por ejemplo, cuando una búsqueda devuelve muchas páginas de resultados y no sabemos de antemano cuántas son. En ese caso necesitamos ir siguiendo los links de las páginas hasta que no queden más. 
+
+Supongamos queremos extraer el titulo de todas las notas con la palabra clave "argentina" en julio de 2020. En primer lugar usamos el buscador del sitio para obtener la URL de la búsqueda. Luego debemos ir recorriendo cada página hasta que no queden más. Para esto podemos simular una sesión con las funciones `rvest::html_session()` y `rvest::follow_link()`.  
+
+```{r}
+# fijamos la URL semilla / inicial
+url_inicial = "https://www.eltiempo.com/buscar?
+q=argentina&publishedAt%5Bfrom%5D=20-07-01&publishedAt%5Buntil%5D=20-07-31&
+contentTypes%5B0%5D=article" %>% str_remove_all("\n")
+
+# 1. funcion para extraer los titulos de un html
+extrae_titulos = function(html) {
+  selector_titulos = ".title"
+  titulos = html %>%
+    html_nodes(selector_titulos) %>%
+    html_text(trim=T)
+  return(titulos)  
+}
+
+# 2. funcion para extraer link "siguiente" de un html
+extrae_link_next = function(html) {
+  selector_next = ".next a"
+  link = html %>%
+    html_nodes(selector_next) %>%
+    html_attr(name="href")
+  return(link)
+}
+
+# inicializamos vector de rdos
+titulos = c()
+# iniciamos la sesion en la URL semilla
+web = html_session(url_inicial)
+# iteramos por pagina:
+while (TRUE) {
+  # extraemos titulos
+  titulos_i = extrae_titulos(web)
+  # los agregamos al vector de resultados
+  titulos = c(titulos, titulos_i)
+  # vamos a la pagina siguiente si tiene link:
+  link_i = extrae_link_next(web)
+  if (length(link_i) > 0) {
+    web = follow_link(web, css=".next a")
+  } else {
+    break
+  }
+}
+
+cat( length(titulos) )
+cat( titulos[1:3], sep="\n" )
+
+```
+
+
+#### Selenium (crawling avanzado)
+
+`rvest` no es lo suficientemente potente como para desempeñar algunas funciones como:
+
+* acceder a sitios que requieren autenticaciones,
+* manejar redirecciones, o 
+* extraer datos de HTML que mutan dinámicamente. 
+
+**Selenium** es un programa que automatiza la navegación por sitios web y permite resolver estos problemas. En particular podemos usar la interfaz para R [**RSelenium**](https://github.com/ropensci/RSelenium). 
+
+Con RSelenium es posible navegar por la web y acceder a los datos simulando clicks, introduciendo credenciales como usuario y contraseña, entre otros. Si bien algunas de estas funcionalidades existen en `rvest`, no están suficientemente desarrolladas por el momento.  
+
+## Recursos
+
+- [¿Qué es una API?](https://zapier.com/learn/apis/chapter-1-introduction-to-apis/)
+- [Vignette de SelectorGadget](https://cran.r-project.org/web/packages/rvest/vignettes/selectorgadget.html)
+- [Repositorio de herramientas R + web](https://github.com/ropensci/webservices)
+- [Tutorial rvest + selenium](https://lmyint.github.io/post/dnd-scraping-rvest-rselenium/)
+- [Las APIs web y el fin del universo :)](https://www.youtube.com/watch?v=BxV14h0kFs0&ab_channel=TomScott)

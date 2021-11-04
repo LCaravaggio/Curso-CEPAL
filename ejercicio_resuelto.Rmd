@@ -1,0 +1,91 @@
+---
+title: "DEMO"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=F)
+
+library(flexdashboard)
+library(tidyverse)
+library(DT)
+library(plotly)
+
+```
+
+```{r data}
+dat = read_csv("data/worldbank.csv")
+dat = dat %>% select(-date)
+id_cols = c("iso3c", "country", "region", "income_level")
+
+```
+
+Distribuciones
+==============
+
+columna
+-------
+
+### Gráficos de densidad
+
+```{r density}
+# densidad por variable
+gdat = dat %>% 
+  pivot_longer(-all_of(id_cols), names_to="variable", values_to="value")
+plt = 
+  ggplot(gdat) +
+  geom_density(aes(x=value), fill="red", alpha=0.2) +
+  facet_wrap(~variable, scales="free", ncol=2) +
+  labs(x=NULL, y=NULL) +
+  theme(axis.text.y=element_blank()) +
+  NULL
+
+ggplotly( plt )
+
+```
+
+columna {.tabset}
+----------------
+
+### Salud
+
+```{r}
+plt = 
+  ggplot(dat) +
+  geom_jitter(aes(x=uhc, y=exp_vida, label=country), alpha=0.8, size=0.7) +
+  # geom_point(aes(x=uhc, y=exp_vida, label=country), alpha=0.8, size=1) +
+  NULL
+
+ggplotly( plt )
+
+```
+
+### Demografía
+
+```{r}
+plt = 
+  ggplot(dat) +
+  geom_jitter(aes(x=porc_urban, y=porc_65, label=country), alpha=0.8, size=0.7) +
+  # geom_point(aes(x=uhc, y=exp_vida, label=country), alpha=0.8, size=1) +
+  NULL
+
+ggplotly( plt )
+
+```
+
+
+Datos
+=====
+
+```{r}
+DT::datatable(
+  dat
+  ,extensions='Buttons'
+  ,filter='top'
+  ,options=list(dom='Bfrtip', buttons=c('copy','csv','excel','pdf','print'))
+)
+```
+

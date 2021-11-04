@@ -1,0 +1,406 @@
+---
+title: "Introduccion a la Ciencia de Datos"
+subtitle: "Taller 2 - Explorando y Transformando los datos"
+output: 
+  html_document:
+    #css: style.css 
+    fig_height: 8
+    fig_width: 12
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: paper
+editor_options: 
+  chunk_output_type: console
+---
+```{r options, echo = FALSE}
+knitr::opts_chunk$set(warning = FALSE,
+                      error = FALSE,
+                      message = FALSE)
+``` 
+
+# Introducción a Data Wrangling
+
+Vamos a dedicarnos al Data Wrangling (la tarea de transformación de los datos) que hace referencia a la transformación y el procesamiento de los datos para darles una forma que nos sirvan para consumirlos. Esta es una de las etapas del procesamiento de los datos que más tiempo nos suele llevar.  
+Las funciones que vamos a estar utilizando pertenecen a un paquete que se llama **dplyr**, pero no vamos a necesitar instalarlo, dado que se encuentra dentro de **tidyverse**, la librería que instalamos en el taller anterior. 
+
+![](dplyr_wrangling.png "Logo Title Text 1")
+
+*Diseños de Allison Horst: Allisonhorst/stats-illustrations*
+
+Llamemos entonces a nuestra libería corriendo el código:  
+
+```{r Libreria}
+library(tidyverse)
+```
+
+# Importar y Explorar
+
+Vamos a abrir nuestro dataframe de ejemplo, vamos a estar trabajando con un data frame que contiene información sobre la producción de vegetales por departamento, producto y año, realizadas por los Núcleos de Agricultura Familiares (NAF). La fuente de los datos es:
+
+https://datos.gob.ar/dataset/agroindustria-agricultura-familiar---producciones-nucleos-naf/archivo/agroindustria_facd2e35-637e-4429-b46a-b1a59f3a19e4
+
+
+Un archivo .csv es un archivo de texto, separado por comas y saltos de línea, que permite guardar una tabla de datos en un formato mucho mas fácil de procesar en términos de tamaño (texto plano). Corramos la funcion *read.csv()** y observemos qué sucede.
+
+```{r Dataset}
+data_vegetales <- read.csv('datos-de-produccion-vegetal-de-los-naf.csv')
+```
+
+Notemos que creamos el objeto "data_vegetales", asignándole un contenido mediante el símbolo "<-". El contenido nos lo trae la función read.csv() desde nuestro ordenador.  
+Nuevamente deberemos indagar el contenido de la base. Dejamos las herramientas más comunes y útiles para hacerlo, tomando para el caso de hoy sólo algunos ejemplos.  
+
+```{r Indagar}
+# head(data_vegetales)
+# str(data_vegetales)
+# glimpse(data_vegetales)
+
+sample_n(data_vegetales, size = 10)
+summary(data_vegetales)
+names(data_vegetales)
+```
+
+Otra forma de conocer la composición de una variable o contar frecuencias es *count()*  mediante *unique()*, veamos ejemplos. 
+
+```{r Contar}
+# count(data_vegetales, produccion)
+
+unique(data_vegetales$nom_provincia)
+unique(data_vegetales$anio)
+```
+
+Noten el uso del signo "$" nos permite ver y elegir una de las variables del data frame. Si bien no todas las funciones aceptan esta forma de nombramiento y requieren el uso de comas (tal como count()), puede ser útil en algunas ocasiones.  
+Como vemos, hay algunos datos que vamos a tener que reemplazar o podríamos querer remover. Para eso están las funciones de **dplyr**
+
+# Principales funciones de Dplyr
+
+Veamos las principales acciones / funciones de Dplyr
+
+## Renombrar variables
+
+Mediante **rename()** podemos renombrar variables, vamos a ver un ejemplo.  
+
+```{r Renombrar}
+names(data_vegetales)
+
+vegetales <- rename(data_vegetales, cantidad = "X")
+```
+
+## Seleccionar variables
+
+Muchas veces necesitamos seleccionar un conjunto de  variables, pudiendo prescindir de otras. Este ejercicio facilita el uso de data frames y además, vamos a favorecer la velocidad del procesamiento en tanto que cada vez trabajemos con mayor cantidad de bases y de mayor volumen. *Select()* traerá las variables que enumeremos dentro del paréntesis y, si anteponemos el signo "-" le estaremos señalando qué variables NO queremos que conserve.
+
+```{r Select}
+names(vegetales)
+
+vegetales <- select(vegetales, 
+                    -cod_pais, 
+                    -nom_pais, 
+                    -cod_provincia, 
+                    -cod_depto,
+                    -nom_uni_superficie)
+```
+
+## Filtrar variables
+
+Permite filtrar observaciones usando los operadores lógicos que vimos en el encuentro anterior, en función de los criterios que necesitemos. Supongamos que necesitamos ver los datos de las provincias de Cuyo del último año del que disponemos datos (2016). Qué pasa con las cantidades que nos quedan? Podríamos mejorar la forma de armar el código?
+
+```{r Filtrar}
+unique(vegetales$nom_provincia) # Cuando quiera filtrar las provincias, debo hacerlo tal como están escritas en mi data frame
+
+vegetales_cuyo_2016 <- filter(vegetales, 
+                              anio == 2016,
+                              nom_provincia == "LA RIOJA"|
+                                nom_provincia == "MENDOZA" |
+                                nom_provincia == "SAN JUAN" |
+                                nom_provincia == "SAN LUIS",
+                              cantidad > 0)
+```
+
+Este último paso se ve un poco incómodo Si lo tuvieramos que repetir este mecanismo de filtro en otras partes del trabajo, probablemente nos convenga usar otro método. Para esto podríamos crear un vector que concatene nuestras provincias de Cuyo y e involucrar al operador **%in%**, que se lee "que se encuentra en". Veamos el mismo caso pero aplicando un vector y el operador.  
+
+```{r In}
+cuyo <- c("LA RIOJA", 
+          "MENDOZA", 
+          "SAN JUAN", 
+          "SAN LUIS") # creamos el vector
+
+vegetales_cuyo_2016_in <- filter(vegetales, 
+                              anio == 2016,
+                              nom_provincia %in% cuyo,
+                              cantidad > 0)
+
+head(vegetales_cuyo_2016)
+```
+
+## Crear o modificar variables
+
+Muchas veces necesitamos crear una variable que no tenemos, porque necesitamos calcularla, o porque queremos poder indicar que se cree en función de una determinada condición. Veamos cómo podemos hacerlo sobre dos ejemplos de uso de la función **mutate()**
+
+```{r Crear}
+
+vegetales_cuyo_2016_mediaha <- mutate(vegetales_cuyo_2016, 
+                                      cantidad_media_ha = round(cantidad / cantidad_de_producciones))
+```
+
+También puede darse el caso de que tengamos que incorporar una variable que respete una condición. Para ello puede ser muy útil agregar un **case_when**
+
+Veamos la combinación.  
+
+```{r Caso}
+names(vegetales)
+maiz <- mutate(vegetales, maiz = case_when(produccion == "MAIZ" ~ "SI",
+                                produccion != "MAIZ" ~ "NO"))
+
+names(maiz)
+unique(maiz$maiz)
+```
+
+En caso de no cumplir ninguna de las condiciones establecidas la variable tomara valor NA.
+
+## Integrar el codigo con Pipe
+
+Estuvimos aplicando funciones de transformación de nuestro data frame inicial creando un objeto diferente cada vez y en múltiples líneas de código. Esto no es del todo eficiente ni permite ordenar la información.  
+Una manera muy simple de solucionar esto es usar el pipe de magrittr: __%>%__. Este operador hace que podamos listar y aplicar muchas funciones a un mismo data frame en una misma agrupación de código. En otras palabras, le indicará a R, que espere encontrarse en la proxima línea otra operación a realizar sobre el data frame o resultado que le indicamos antes del primer pipe. Volquemos las operaciones de transformación que estuvimos haciendo en un mismo bloque de código, usando el pipe.  
+```{r Pipe}
+vegetales_cuyo_16 <- data_vegetales %>% 
+  rename(cantidad = "X") %>% 
+  select(-cod_pais, 
+         -nom_pais, 
+         -cod_provincia, 
+         -cod_depto,
+         -nom_uni_superficie) %>% 
+  filter(anio == 2016,
+         nom_provincia %in% cuyo,
+         cantidad > 0) %>% 
+  mutate(cantidad_media_ha = round(cantidad / cantidad_de_producciones))
+
+head(vegetales_cuyo_16)
+```
+
+Como siempre trabaja sobre sobre el resultado parcial del data frame de la línea anterior, no es necesario indicarle explícitamente sobre qué data frame aplicar la función. Se parece a la serie de pasos que podríamos aplicar a una receta. Primero le decimos a R cuál es el data frame sobre el que queremos realizar las operaciones y luego le vamos indicando qué acciones debe aplicar.  
+
+Ya logramos aplicar algunas transformaciones y mejorar el armado del código de ese proceso. Veamos otras herramientas aplicadas a una tarea concreta.  
+
+##  Júntense las tablas
+
+Si lo necesitara, ¿podría recuperar datos de las columnas que eliminé al inicio? Sí, podemos! Porque tenemos una variable (o más) por las cuales unir el data frame de Cuyo 2016 con el del inicio. Para esto existe el **join**
+Los join son funciones que tienen por finalidad unir data frames por al menos una variable en conmún. Existen diferentes join, como vemos en la imagen. Hoy usaremos uno de uso muy frecuente, el **left_join**
+Veamos un ejemplo!  
+
+Supongamos que necesitamos recuperar para nuestros datos de Cuyo 2016, el código de departamente y provincia que sacamos al inicio del proceso. Un left_join() nos permite hacerlo.  
+
+```{r Leftjoin}
+
+vegetales_cuyo_codigo <- vegetales_cuyo_16 %>% 
+  left_join(select(data_vegetales, nom_provincia, cod_provincia, cod_depto), "nom_provincia") # dentro de select() data_vegetales es el data a unir, y la variable bajo comillas es la variable de coincidencia para esa unión
+
+names(vegetales_cuyo_codigo)
+```
+
+Sumamos - dentro de éste *left_join()* - un select() por dos razones: 1) al ser un caso con varias columnas en común, si no le hubiesemos indicado al Join qué variables traer, hubiera traido todas las variables, duplicando columnas que no necesitamos duplicar, y 2) porque teníamos como objetivo tener los números de cógido de cada provincia y departamento.  
+
+Con respecto al resto de los join, presentamos esta versión gráfica de sus funcionamientos.  
+
+![](join.PNG "Logo Title Text 1")
+
+Fuente imagen: *http://rstudio-pubs-static.s3.amazonaws.com/227171_618ebdce0b9d44f3af65700e833593db.html*
+
+## Group_by
+
+Otra herramienta fundamental en nuestro código es el **group_by()**
+
+Nos permite justamente agrupar la información, por lo cual en general su uso no contrae los data sets. Si ejecutamos el group_by() solo, no vamos a ver cambios, siempre tenemos que indicar en función de qué variable queremos agrupar la información y qué resultado queremos agregar. Esto puede significar crear una nueva variable que cuente, sume o realice un cálculo sobre un dato que explicitemos.  
+Por esta razón, group_by() se compone de dos funciones: group_by() y summarise(). La primera, no hace más que agrupar información sobre los registros que tienen un mismo valor, no solo cuántos de ellos había sino qué información asociada a todos ellos.  
+Summarise() es la función que nos permitirá mostrar información asociada a esta agrupación. 
+
+Podemos proponernos armar dos data frames más chicos que nos respondan las siguientes preguntas:
+
++ cantidad de producciones NAF por provincia en 2016
+
+```{r cantidad}
+cant_produccion_provincia <- data_vegetales %>% 
+  rename(cantidad=X) %>% 
+  filter(anio == 2016 ) %>% 
+  group_by(cod_provincia, nom_provincia) %>% 
+  summarise(cantidad_prod_prov = sum(cantidad_de_producciones)) %>% 
+  ungroup()
+```
+
++ cantidad de hectáreas superficie con producciones NAF por provincia en 2016
+
+```{r superficie}
+superficie_produccion_provincia <- data_vegetales %>% 
+  filter(anio == 2016) %>% 
+  group_by(cod_provincia, nom_provincia) %>% 
+  summarise(superficie_total = sum(superficie_total)) %>% 
+  ungroup()
+```
+
+Unifiquemos con left_join() ambas tablas. Además de volver a usar el left_join(), agregamos el uso de **arrange()** que nos permite ordenar los datos en función de la variable que le indiquemos de manera ascendente. 
+Si le incorporamos la función desc() le indicamos que ordene de manera descendente.  
+```{r Joineo}
+cant_sup_produccion <- cant_produccion_provincia %>% 
+  left_join(select(superficie_produccion_provincia, # data a unir
+                   cod_provincia, # variable que quiero que deje
+                   superficie_total), # variable que quiero que deje
+            "cod_provincia") %>% # variable de unión
+  select(-cod_provincia) %>% 
+  arrange(desc(superficie_total))
+```
+
+# Valores no disponibles
+
+Un tipo de dato que es muy común encontrar es el **NA**, es decir, un valor no disponible (Not Available). Son valores ausentes o desconocidos para un registro. Debemos tener cuidado con estos datos porque el criterio de cómo operar con ellos va a variar de acuerdo a la necesidad y al impacto de la definición metodológica que se tome al respecto.  
+Veamos un ejemplo donde evaluamos con los operadores de comparación anterior un valor NA.  
+
+```{r NA1}
+5 >= NA
+```
+
+Cuando pedimos a R que evalúe si en este caso un valor desconocido es mayor o igual a otro valor. Nos dará como resultado un valor desconocido, ya que no lo puede determinar Lo mismo sucede si quisieramos hacer una operación matemática sobre este valor.
+
+```{r NA2}
+NA + 10 * 4
+```
+
+R tampoco podría saber cuanto es un valor desconocido después de esas operaciones. Algo con lo que tenemos que tener bastante cuidado también es con intentar evaluar si un valor desconocido es igual a otro, ya que tampoco R puede deducirlo.
+
+```{r NA3}
+NA == NA
+```
+
+La pregunta correcta que muchas veces nos queremos hacer es si un valor es desconocido. Y para eso tenemos una función **is.na()**
+
+Retomando entonces el ejemplo de nuestro data frame, veamos algunas funciones báscicas que nos permitan conocer si contamos con NA, dónde están, cuántos son y/o qué porcentaje de la variable representan:  
+
+```{r Isna}
+na_vegetales <- vegetales %>% # Contiene mi data frame datos NA si o no?
+  count(is.na.data.frame(vegetales))
+
+any(is.na(vegetales)) # Cuántos NA contiene mi DF?
+
+any(is.na(vegetales$cod_provincia)) # Contiene NA determinada variable?
+
+sum(is.na(vegetales$cantidad_de_producciones)) # Cuántos NA contiene determinada variable
+
+which(is.na(vegetales$cantidad_de_producciones)) # Qué registros contienen NA, poco conveniente en DF de gran volumen
+
+sin_na_vegetales <- na.omit(vegetales) # Excluyo todos los NA de mi DF
+
+mean(is.na(vegetales)) # calculo el promedio de NA sobre mi DF
+
+apply(is.na(vegetales), 2, mean) # Obtengo valores absolutos de NA por cada columna (2) de mi DF
+
+apply(is.na(vegetales), 2, sum) # Obtengo porcentaje de NA por cada columna (2) de mi DF
+```
+
+# Fechas
+
+Las fechas son un tipo de dato bastante más complejo que el resto y en el cual podríamos poner la lupa muy a fondo, vamos a intentar adquirir los conocimientos básicos para a partir de un paquete llamado lubridate manejar los casos básicos.
+
+Lo primero que deberíamos hacer es instalar lubridate con el comando **install.packages("lubridate")**. Luego disponibilizamos sus funciones con el comando que ya conocemos.
+
+```{r Lubridate}
+library(lubridate)
+```
+
+![](lubridate_ymd.PNG "Logo Title Text 1")
+
+*Diseños de Allison Horst: Allisonhorst/stats-illustrations*
+
+Vamos a corrernos por un momento del data frame que veníamos usando porque en verdad la variable "anio" sera tomada como dato categórico y no hemos necesitado moldear su contenido. Pero en otras ocasiones, las fechas traen un formato character o factor a formato date de este paquete para poder aplicarle las funciones básicas del mismo. Lo primero que debemos hacer es identificar en qué orden tiene nuestro dato los valores año (y), mes (m), dia (d), horas(h), minutos(m) y segundos (s). De esta manera podemos usar la función que se acomode a lo que necesitamos. Veamos algunos ejemplos inventados.
+
+```{r}
+fecha_ejercicio <- ymd_hms("2018-07-15 16:30:00")
+```
+
+Estamos indicándole a R que, por detrás, clasifique cada uno de los números que les estamos pasando y de acuerdo al orden que le indicamos, los clasifique según corresponda en Años, Meses, Días, Horas, Minutos y Segundos.
+Una vez que pudimos llevarlo al formato de lubridate, podemos utilizar todas sus funciones. La finalidad es lograr mediante lubridate que R identifique el dato que tenemos con un formato determinado de fecha que nos permita realizar operaciones de cálculo u obtener datos temporales sin tener que realizar las cuentas por nosotrxs mismxs.
+
+Obtener el mes
+```{r}
+month(fecha_ejercicio)
+```
+
+Obtener la hora
+```{r}
+hour(fecha_ejercicio)
+```
+
+También existen las funciones year(), day(), minutes() y second(). 
+Veamos como obtener el dia de la semana.
+
+```{r}
+wday(fecha_ejercicio, label = TRUE)
+```
+
+Obtener la fecha anterior que da inicio a un mes. (podría ser year, week, hour).
+```{r}
+floor_date(fecha_ejercicio)
+```
+
+Obtener la diferencia entre dos fechas! 
+
+```{r}
+now() - fecha_ejercicio
+```
+
+Este tipo de operaciones tienen mucha aplicación cuando necesitamos agrupar datos por fecha (por ejemplo mes u año) o para obtener, por ejemplo, cálculos de edades o rangos etáreos.
+
+Esto nos lleva a introducir un nuevo concepto, uno muy util por cierto, las cheatsheets! Que son? Entremos a la de lubridate y veamos.
+
+https://rawgit.com/rstudio/cheatsheets/master/lubridate.pdf
+
+Es una hoja donde podemos ver las funciones básicas de un paquete. No hay de todos pero de los principales podemos encontrar esta bella ayuda. Pueden ir a Help -> cheatsheets y ver algunas que vienen instaladas en Rstudio.
+
+# Presentación de cuadros y guardado
+
+**Cuadros presentables con KableExtra**
+
+Muchas veces necesitamos a librería kableExtra() que ayudan a la presentación de tablas. Si bien le vamos a dar buen uso más adelante, por ahora sepamos que existe y que mejora la visualización y los resultados en las salidas de archivo. Veamos nuevamente un ejemplo.  
+
+
+```{r Kable}
+# install.packages("kableExtra")
+library(kableExtra)
+# library(knitr)
+
+kable(cant_sup_produccion) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12) %>%
+  footnote(general = "Fuente: datos.gob.ar")
+  
+# column_spec(1, background = "#1ed7ac") # colorear columna
+# row_spec(3:5, bold = T, color = "white", background = "#98e3d2") # colorear fila
+```
+
+Acá pueden encontrar más información sobre las posibilidades de configuración de cuadros en:
+https://cran.r-project.org/web/packages/kableExtra/vignettes/awesome_table_in_html.html
+
+**Guardado**
+
+Así como usamos read.csv() para llamar a nuestro data, vamos a usar **write.csv()** para exportar nuestro resultado y compartirlo de ser necesario. Vamos a utilizar write.csv o write.csv2 según que símbolo queremos usar para separar los valores.  
+
+```{r Guarda}
+write.csv(cant_sup_produccion,
+           file = 'cant_sup_produccion.csv',
+           row.names = FALSE) # para que no genere una columna numérica por registro/fila
+```
+
+# Datos utiles
+
+Atajos y algunas funciones útiles para tener en mente:  
+
++ ?tidyverse # buscar ayuda sobre librerías
++ ?read.csv # buscar ayuda sobre funciones
++ rm(vegetales) # Remover del ambiente un objeto que no quiero o necesito
++ getwd() # Conocer el directorio donde estoy trabajando con R
+
+# Plantillas o Cheatsheets
+
+Con la descarga de R (ver en Help -> Cheatsheets) podemos contar con plantillas que sintetizan de forma gráfica y amigable las funciones más usadas de R. 
+Las recomendamos especialmente porque resultan de ayuda al inicio y como recordatorios para el después. Es decir, siempre!
+
+También las pueden ver en: https://rstudio.com/resources/cheatsheets/

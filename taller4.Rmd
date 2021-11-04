@@ -1,0 +1,806 @@
+---
+title: "Introduccion a la Ciencia de Datos"
+subtitle: "Clase 4 - Correcciones y adaptaciones"
+output: 
+  html_document:
+    #css: ../style.css 
+    fig_height: 8
+    fig_width: 12
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: paper
+editor_options: 
+  chunk_output_type: console
+---
+```{r options, echo = FALSE}
+
+knitr::opts_chunk$set(warning = FALSE,
+                      error = FALSE,
+                      message = FALSE)
+
+``` 
+
+```{r}
+# install.packages("janitor")
+```
+
+
+
+```{r bibliotecas}
+library(tidyverse)
+library(kableExtra)
+library(janitor)
+```
+
+# Introducción
+
+Muchas veces nos enfrentamos a bases de datos que fueron realizadas con objetivos diferentes al propósito de análisis que tenemos y que se encuentran o en formatos poco amigables para el procesamiento o que tienen algunas dificultades en la presentación de los datos.
+Recorreremos algunas estrategias para modificar los datasets o la información de modo que se ajusten mejor a los objetivos que podamos tener.
+
+
+# Transformaciones entre filas y columnas
+
+## Pivot longer
+
+Frecuentemente encontrarán que la información no está ordenada en formato **Tidy**. Para que eso suceda deben cumplirse las siguientes condiciones:
+
+* Cada variable debe tener su propia columna.
+
+* Cada observación debe tener su propia fila. 
+
+* Cada valor debe tener su propia celda.
+
+
+Para transformar estas estructuras, presentamos las valiosas funciones que nos permiten **Pivotear**.
+
+
+Veamos la distribución de frecuencias de personas según edad y género en una población determinada:
+
+```{r carga tabla wide}
+
+grupo_edad_genero <- read_delim("grupoedad_genero.csv",
+                                delim = ",")
+
+
+kable(grupo_edad_genero) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+```
+
+Identifiquemos las variables en la tabla: 
+
++ género
+
++ rango de edad
+
++ cantidad de personas
+
+
+Sólo una de esas variables es una columna, los valores de rango etario está en el nombre de la columna y se organizan horizontalmente, y los valores de recuento de personas en celdas de cada una de estas columnas. 
+
+Para pivotar hacia una tabla larga, debemos identificar las columnas seleccionadas, y los nombres de las nuevas variables que contendrán sus valores.
+
+
+![](pivot_longer.jpg "pivot longer")
+
+
+
+```{r pivot longer}
+tabla_longer <- grupo_edad_genero %>% 
+  pivot_longer(cols = 2:11, names_to = "rango_edad", values_to = "cantidad_personas")
+
+
+kable(tabla_longer) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+
+# tabla_longer <- grupo_edad_genero %>%
+#   pivot_longer(-genero, names_to = "rango_edad", values_to = "cantidad_personas")
+
+```
+
+
+
+## Pivot wider
+
+Esta función realiza la operación inversa a pivot longer para transformar a tablas mas "anchas", desplegando horizontalmente en los nombres de nuevas variables los valores de la variable a expandir, y asignando valores desde otra variable seleccionada.
+Usaremos como ejemplo la base de personas de Ciencia y Tecnología utilizada en clases anteriores:
+
+
+```{r carga tabla long}
+personas_2018 <- read_delim("personas_2018.csv",
+                            delim = ";")
+
+ref_sexo <- read_delim("ref_sexo.csv",
+                      delim = ";")
+
+
+ref_disciplina <- read_delim("ref_disciplina.csv",
+                            delim = ";")
+
+```
+
+
+Me interesa conocer como se distribuyen las grandes areas disciplinares según género:
+
+```{r}
+personas_sexo_disciplina<- personas_2018 %>% 
+  select(persona_id, sexo_id, disciplina_id=disciplina_maximo_grado_academico_id) %>% 
+  left_join(ref_sexo) %>% 
+  left_join(ref_disciplina) %>% 
+  count(sexo_descripcion, gran_area_descripcion)
+
+kable(personas_sexo_disciplina) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+
+# group_by(sexo_descripcion, gran_area_descripcion) %>% 
+#   summarise(cantidad_personas=n())
+
+```
+
+Queremos ahora modificar la distribución de filas y columnas para visualizar con mayor claridad la distribución en la tabla. Para eso vamos a probar pivotando cada gran área como columna (nueva variable) y asignando como contenido la frecuencia para cada género:
+
+```{r}
+tabla_wide <- personas_sexo_disciplina %>% 
+  pivot_wider(names_from = gran_area_descripcion, values_from = n)
+
+kable(tabla_wide) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+```
+
+
+Otro conflicto que podemos tener es contar con valores no disponibles. Veremos cómo lidiar con este tipo de dato. 
+
+# Valores no disponibles
+
+Un tipo de dato que es muy común encontrar es el **NA**, es decir, un valor no disponible (Not Available). Son valores ausentes o desconocidos para un registro. Debemos tener cuidado con estos datos porque el criterio de cómo operar con ellos va a variar de acuerdo a la necesidad y al impacto de la definición metodológica que se tome al respecto.  
+Veamos un ejemplo donde evaluamos con los operadores de comparación anterior un valor NA.  
+
+```{r NA1}
+5 >= NA
+```
+
+Cuando pedimos a R que evalúe si en este caso un valor desconocido es mayor o igual a otro valor. Nos dará como resultado un valor desconocido, ya que no lo puede determinar Lo mismo sucede si quisieramos hacer una operación matemática sobre este valor.
+
+```{r NA2}
+NA + 10 * 4
+```
+
+R tampoco podría saber cuanto es un valor desconocido después de esas operaciones. Algo con lo que tenemos que tener bastante cuidado también es con intentar evaluar si un valor desconocido es igual a otro, ya que tampoco R puede deducirlo.
+
+```{r NA3}
+NA == NA
+```
+
+La pregunta correcta que muchas veces nos queremos hacer es si un valor es desconocido. Y para eso tenemos una función **is.na()**
+
+Retomando entonces el ejemplo de nuestro data frame de vegetales, veamos algunas funciones báscicas que nos permitan conocer si contamos con NA, dónde están, cuántos son y/o qué porcentaje de la variable representan:  
+
+
+
+```{r Dataset}
+
+vegetales <- read.csv('datos-de-produccion-vegetal-de-los-naf.csv') %>%
+  rename(cantidad = "X")
+
+```
+
+
+```{r Isna}
+na_vegetales <- vegetales %>% # Contiene mi data frame datos NA si o no?
+  count(is.na.data.frame(vegetales))
+
+any(is.na(vegetales)) # Cuántos NA contiene mi DF?
+
+any(is.na(vegetales$cod_provincia)) # Contiene NA determinada variable?
+
+sum(is.na(vegetales$cantidad_de_producciones)) # Cuántos NA contiene determinada variable
+
+which(is.na(vegetales$cantidad_de_producciones)) # Qué registros contienen NA, poco conveniente en DF de gran volumen
+
+sin_na_vegetales <- na.omit(vegetales) # Excluyo todos los NA de mi DF
+
+mean(is.na(vegetales)) # calculo el promedio de NA sobre mi DF
+
+apply(is.na(vegetales), 2, mean) # Obtengo valores absolutos de NA por cada columna (2) de mi DF
+
+apply(is.na(vegetales), 2, sum) # Obtengo porcentaje de NA por cada columna (2) de mi DF
+```
+
+
+En el último caso lo que realizamos fue una estrategia de iteración a través de columnas. En el siguientes apartado veremos más sobre como se utiliza esta lógica, en particular cuando queremos realizar alguna operación fila por fila. 
+
+
+
+
+# Programación funcional
+
+La programación funcional permite organizar y optimizar sintaxis y funcionalidad del código mediante la utilización de funciones y de controles de flujo de la información. Permite crear funciones pequeñas y simples que admiten dentro otras funciones o atributos, y resuelven un problema determinado de manera controlada.
+
+Incluye:
+
+*Estructuras de código condicionales
+*Loops
+*Creación de funciones a medida del usuario
+*Librería purrr para programación funcional
+
+
+## Estructuras de ejecución condicional
+
+Las estructuras condiconales nos permiten ejecutar una porción de código en caso de que cumplan una condición lógica
+
+### if
+
+Una sentencia if (si) te permite ejecutar un código condicional. La condición debe evaluar como TRUE o FALSE. Por ejemplo:
+
+
+```{r results= "hide", message=FALSE, eval=FALSE}
+if (condición) {
+ # el código que se ejecuta cuando la condición es verdadera (TRUE)
+} else {
+ # el código que se ejecuta cuando la condición es falsa (FALSE)
+}
+```
+
+
+
+Su funcionamiento es el siguiente:
+
+if(condicion){codigo a ejecutar si se cumple la condición}
+
+```{r}
+if( 7 > 5){
+  print("Mayor")
+}
+```
+
+
+```{r}
+if( 7 < 2 ){
+  print("Menor")
+}
+```
+
+
+```{r}
+if (2 > 5) {
+ print("Mayor") # el código que se ejecuta cuando la condición es verdadera (TRUE)
+} else {
+ print("Menor")# el código que se ejecuta cuando la condición es falsa (FALSE)
+}
+```
+
+
+
+### ifelse
+
+La función if_else() sirve para crear o modificar dicotómicamente un objeto/variable/vector a partir del cumplimiento de una o más condiciones lógicas.
+Su funcionamiento es el siguiente:
+
+if_else(condicion,función a aplicar si se cumple la condición,función a aplicar si no se cumple la condición)
+
+```{r}
+if_else(7 > 5, true = "Mayor",false = "Menor")
+```
+
+
+### Condiciones múltiples
+Se pueden encadenar múltiples sentencias if juntas:
+
+```{r results= "hide", message=FALSE, eval=FALSE}
+if (condicion_1) {
+ # hacé esto
+} else if (condicion_2) {
+ # hacé otra cosa
+} else {
+ # sino hacé esto otro
+}
+```
+
+
+Si queda una larga serie de sentencias if encadenadas, deberías considerar reescribir el código. 
+
+Estilo del código:
+Es importante que el contenido de if esté entre llaves ({}). La llave de apertura nunca debe ir en su propia línea y siempre debe ir seguida de una línea nueva. Una llave de cierre siempre debe ir en su propia línea, a menos que sea seguida por else. 
+
+
+## loops
+
+La iteración y las funciones permiten reducir la duplicación en el código, en lugar de copiar y pegar reiteradamente. Esto tiene tres beneficios principales:
+
+1- Es más fácil ver el objetivo de tu código.
+
+2- Es más simple realizar cambios. A medida que tus necesidades cambian o cuando identificas errores, solo necesitarás realizar cambios en un lugar, en vez de recordar cambiar en cada lugar donde copiaste y pegaste el código.
+
+3- Es probable que tengas menos errores porque cada línea de código es utilizada en más lugares.
+
+La iteración es una herramienta valiosa cuando necesitas hacer la misma tarea con múltiples entradas: repetir la misma operación en diferentes columnas o en diferentes conjuntos de datos.
+
+Un loop es una estructura de código que nos permite aplicar iterativamente un mismo conjunto de comandos, variando el valor de una variable. Por ejemplo:
+
+```{r}
+for(i in 1:10){
+   print(i^2)
+}
+
+```
+
+
+Esto se lee como : “Recorre cada uno de los valores (i) del vector numérico 1 a 10, y para cada uno de ellos imprimí el cuadrado (i^2)”.
+Un loop puede iterar sobre cualquier tipo de vector, independientemente de lo que contenga. Se puede especificar la palabra que desee que tome cada uno de los valores que debe tomar. En el ejemplo anterior fue i, pero bien podría ser “Valores”.
+
+```{r}
+for(Valores in 1:10){
+   print(Valores^2)
+  
+}
+```
+
+
+
+Si quisiéramos calcular la mediana de cada una de estas variables numéricas del dataframe, podemos hacerlo de varias maneras:
+
+```{r}
+df <- tibble(
+  a = rnorm(10),
+  b = rnorm(10),
+  c = rnorm(10),
+  d = rnorm(10)
+)
+```
+
+Copiando y pegando el siguiente código:
+
+```{r}
+median(df$a)
+
+```
+
+```{r}
+median(df$b)
+
+```
+
+```{r}
+median(df$c)
+```
+
+
+```{r}
+median(df$d)
+
+```
+
+O podemos hacer un for loop para que itere en cada uno de los elementos:
+
+```{r}
+output <- c("double", ncol(df))       # 1. output
+for (i in seq(df)) {                  # 2. secuencia
+  output[[i]] <- median(df[[i]])      # 3. cuerpo
+}
+output
+```
+
+
+Cada bucle tiene tres componentes:
+
+output: antes de comenzar el loop, siempre debes asignar suficiente espacio para la salida. Una forma general es crear un vector vacío de longitud dada con dos argumentos: el tipo de vector (“logical”, “integer”, “double”, “character”, etc) y su longitud.
+
+La secuencia: i in seq(df). Este código determina sobre qué iterar: cada ejecución del bucle for asignará a i un valor diferente de seq(df). 
+seq() es una versión segura de 1:length(l), con una diferencia importante: si se tiene un vector de longitud cero (accidental o intencionalmente), seq() hace lo correcto.
+
+
+El cuerpo: output[[i]] <- median(df[[i]]). Este es el código que hace el trabajo. Se ejecuta repetidamente, con un valor diferente para i cada vez. La primera iteración ejecutará output[[1]] <- median(df[[1]]), la segunda ejecutará output [[2]] <- median (df [[2]]), y así sucesivamente.
+
+
+
+Además de iterar sobre los índices numéricos con for (i in seq(xs)), y extraer el valor con x [[i]] hay otras dos formas de hacerlo:
+
+Iterar sobre los elementos: for (x in xs).
+
+Iterar sobre los nombres: for (nm in names(xs)). Esto es útil si queremos utilizar el nombre en el título de un gráfico o en el nombre de un archivo. 
+
+
+Veamos otra aplicación. Vamos a utilizar un dataset público del Ministerio de Agricultura, Ganadería y Pesca sobre exportaciones argentinas de frutas en toneladas, entre los años 2013 - 2017. Está disponible en: https://datos.gob.ar/dataset/agroindustria-frutas---anuario-exportaciones
+
+Contiene información de exportaciones argentinas por país de destino de: arándanos, ciruelas, duraznos, limones, mandarinas, manzanas, naranjas, peras, pomelos y uvas. Está expresado en dólares y por toneladas desde el año 2013 hasta 2017 (INDEC)
+
+
+Vamos a cargarlo en nuestro entorno:
+
+```{r Dataset frutas}
+frutas <- read_delim("exportaciones_de_frutas.csv", delim = ";")
+```
+
+
+Utilizamos algunas funciones ya conocidas para explorar el contenido del dataframe, para conocer dimensiones, variables disponibles, tipos de datos y medidas resúmen. 
+
+
+```{r Explorar2}
+names(frutas)
+head(frutas)
+summary(frutas)
+glimpse(frutas)
+
+unique(frutas$pais_destino)
+```
+
+Nos interesa conocer el total de toneladas exportadas por año y por país de destino,independientemente del producto:
+
+```{r ejemplos}
+frutas_exportadas_pais_anio <- frutas %>% 
+  group_by(pais_destino, año) %>% 
+  summarise(total_pais_anio = sum(totales)) %>% 
+  ungroup()
+```
+
+
+Queremos hacer un gráfico individual por pais que muestre la evolucion temporal de toneladas exportadas:
+
+
+```{r results="hide"}
+# Loop
+
+
+lista_graficos_frutas <- list() # creo lista vacia como contenedor
+
+vector_países <- unique(frutas_exportadas_pais_anio$pais_destino) # armo vector de países
+
+for (i in seq(vector_países)) { # secuencia
+  
+  p <- frutas_exportadas_pais_anio %>% 
+    filter(pais_destino == vector_países[i]) %>% # cuerpo
+    ggplot() +
+    geom_line(aes(x=año, total_pais_anio)) +
+    facet_wrap( ~ pais_destino) # Títulos
+  lista_graficos_frutas[[i]] = p
+  # print(p)
+}
+```
+
+```{r}
+lista_graficos_frutas[3]
+```
+
+
+## PURRR
+MAP es la forma tidy de hacer loops con código mas prolijo y mucho más eficiente.
+
+La función **map** toma un input, una función para aplicar, y alguna otra cosa (por ejemplo parametros que necesite la función)
+```{r results="hide", message=FALSE, eval=FALSE}
+map(.x,   # vector o lista de entrada
+    .f,   # funcion a aplicar
+    …)    #otras opciones
+```
+
+
+Cuando tenemos que pasar dos input usamos **map2**:
+
+
+```{r results="hide", message=FALSE, eval=FALSE}
+map2(.x, .y, .f, …)
+```
+
+Si tenemos más de dos, usamos **pmap**
+```{r results="hide", message=FALSE, eval=FALSE}
+pmap(.l, .f, …)
+```
+
+Vamos a repetir el ejemplo de cálculo de media para cada una de las variables (recordamos que son vectores) de df:
+
+```{r}
+resultado <- map(df, median)
+
+resultado
+```
+
+
+La salida de los map() es una lista, no un vector. Si queremos recuperar los valores originales podemos usar unlist()
+
+```{r}
+unlist(resultado)
+```
+
+
+
+
+### Medidas de centralidad
+
++ Media: se obtiene a partir de la suma de todos sus valores dividida entre el número de sumandos. Su valor puede ser afectado en gran medida por la presencia de incluso un solo valor extremo (una observación inusualmente grande o pequeña).
+ 
++ Mediana: Es el valor medio una vez que se ordenan las observaciones de la más pequeña a la más grande,el valor que parte la distribución a la mitad. Es muy insensible a los valores extremos.
+
++ Moda: es el valor que con mayor frecuencia de ocurrencia.    
+
+
+Podemos calcular medidas resumen anuales, como medias, mediana, moda, mínimos y máximos:
+
+```{r}
+frutas_resumen <- frutas_exportadas_pais_anio %>% 
+  group_by(año) %>% 
+  summarise(min = min(total_pais_anio),
+            media = mean(total_pais_anio),
+            mediana = median(total_pais_anio),
+            max = max(total_pais_anio),
+            ds= sd(total_pais_anio))
+
+frutas_resumen
+```
+
+### Cuantiles
+
+Se podrían dividir los datos en más de dos partes. Tentativamente, los cuartiles dividen el conjunto de datos en cuatro partes iguales y las observaciones arriba del tercer cuartil constituyen el cuarto superior del conjunto de datos, el segundo cuartil es idéntico a la mediana y el primer cuartil separa el cuarto inferior de los tres cuartos superiores. Asimismo, un conjunto de datos (muestra o población) puede ser incluso más finamente dividido por medio de percentiles, el 99o percentil separa el 1% más alto del 99% más bajo, y así sucesivamente. 
+
+### Variabilidad o dispersion
+
+El reporte de una medida de centro da sólo información parcial sobre un conjunto o distribución de datos. Diferentes muestras o poblaciones pueden tener medidas idénticas de centro y aún diferir entre sí.
+
+La medida más simple de variabilidad en una muestra es el rango, el cual es la diferencia entre los valores muestrales más grande y más pequeño. Un defecto del rango, no obstante, es que depende de sólo las dos observaciones más extremas y hace caso omiso de las posiciones de los valores restantes. 
+Las medidas principales de variabilidad implican las desviaciones de la media. 
+
+La desviación estándar muestral, denotada por s, es la raíz cuadrada (positiva) de la varianza. Ambas son no negativas. 
+Una interpretación preliminar de la desviación estándar muestral es que es el tamaño de una desviación típica o representativa de la media muestral
+dentro de la muestra dada.
+
+
+# Texto
+
+
+Dado que no toda la información que encontramos en bases de datos es de tipo númerica, es importante conocer algunas de las herramientas que son útiles para lidiar con valores de texto.
+
+
+```{r}
+
+cuyo <- c("LA RIOJA", 
+          "MENDOZA", 
+          "SAN JUAN", 
+          "SAN LUIS") 
+
+
+str_length(cuyo)
+
+str_c(cuyo, collapse = ",")
+
+str_sub(cuyo, 1, 5)
+
+str_count(cuyo, "[AEIOU]")
+
+str_detect(cuyo, "[x]")
+
+str_extract(cuyo, "LA")
+
+str_replace(cuyo, " ", "_")
+
+```
+
+Existe una gran cantidad de funciones de texto, en el siguiente link podrán encontrar el manual de stringr resumido: http://edrub.in/CheatSheets/cheatSheetStringr.pdf
+
+```{r}
+
+financiamiento <- read.csv2("proyectos-financiamiento-externo.csv")
+glimpse(financiamiento)
+
+
+financiamiento <- financiamiento %>% 
+  mutate(
+    cerrado = if_else(str_detect(proyecto_estado, "Cerrado|cierre"), 1, 0),
+    primer_org = word(proyecto_id),
+    numero_proyecto = str_extract(proyecto_id, "[[:digit:]]+"))
+  
+
+```
+
+
+Las expresiones regulares suelen ser complejas hasta que uno tiene mucha práctica en usarlas. En los siguientes links pueden encontrar recursos de ayuda para utilizarlas:
+*https://www.garrickadenbuie.com/project/regexplain/
+*http://web.mit.edu/hackl/www/lab/turkshop/slides/regex-cheatsheet.pdf
+*https://stringr.tidyverse.org/articles/regular-expressions.html
+
+
+
+# Bonus
+
+## Lidiando con un Excel
+
+Excel
+
+```{r}
+
+library(janitor)
+
+curso <- read.csv2("curso.csv", encoding = "UTF-8")
+
+
+curso_n <- curso %>% 
+  clean_names() %>% 
+  remove_empty("rows") %>% 
+  remove_constant()
+
+duplicados <- curso_n %>% 
+  get_dupes()
+
+curso_n <- anti_join(curso_n, duplicados, by = "nombre_de_pila")
+  
+  
+curso_n %>% 
+  tabyl(carrera) %>% 
+  adorn_totals() %>% 
+  adorn_percentages("col") %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns()
+
+
+
+
+```
+
+
+
+
+## Preparando el terreno para regresiones
+
+
+
+La estadística nos enseña sobre cómo pueden realizarse los procesos de generacíon de datos de una manera eficiente, las técnicas y herramientas para reunir información, analizar resultados, sacar conclusiones inteligentes y tomar decisiones informadas ante la presencia de incertidumbre y variación.
+
+La estadística descripptiva nos ayuda a resumir y describir características importantes de un conjunto de datos. Podemos hacerlo con medidas resúmen, tablas y elementos gráficos.
+
+### Poblacion y muestra
+
+Las restricciones de tiempo, dinero y otros recursos escasos casi siempre hacen que conocer las características de una población sea poco práctico o factible. En su lugar, se selecciona un subconjunto de la población, una muestra. 
+Por lo general nos interesan una cantidad finita y conocida de caracteristicas de los objetos en una población: éstas pueden ser categóricas, tal como el género o  de naturaleza numérica como la edad. 
+
+En un problema de estadística, el experimentador dispone de las características de una muestra y esta información le permite sacar conclusiones con respecto a la población. La probabilidad discurre de la población a la muestra (razonamiento deductivo), mientras que la estadística inferencial discurre de la muestra a la población (razonamiento inductivo). 
+Antes de que se pueda entender lo que una muestra particular pueda decir sobre la población, primero se deberá entender la incertidumbre asociada con la toma de una muestra de una población dada.
+
+### Distribución de probabilidad, parametros y estimadores
+
+
+Todo a nuestro alrededor es aleatorio. La teoría de la probabilidad es la herramienta matemática que nos permite analizar los eventos aleatorios de manera estructurada. La probabilidad de un evento es un número que indica que tan factible es la ocurrencia de este. Este número siempre está entre 0 y 1, donde 0 significa imposibilidad, mientras 1 significa certidumbre.
+
+Pensemos en el ejemplo del dado. Probabilidad es asignar a cada cara un número, el cual dará una medida precisa de la oportunidad de que salga esa cara al tirar el dado. 
+
+La distribución de probabilidad hace referencia a los posibles valores teóricos de cada uno de los resultados pertenecientes al espacio muestral.
+
+Existen dos tipos de distribuciones, dependiendo si el espacio muestral es o no numerable.
+
++ Distribuciones discretas: el ejemplo de dado, donde el conjunto de resultados posibles es acotado.
+
++ Distribuciones continuas: el conjunto de resultados posibles es tan grande que no se puede enumerar la probabilidad de cada caso. Ej.: talla de una población.
+En este caso, no podemos definir en una tabla la probabilidad de cada uno de los posibles valores. Sin embargo, sí podemos definir una función de probabilidad, la densidad. Según qué función utilicemos, cambiará la forma de la curva.
+Los parámetros describen a la función de probabilidad. Por lo tanto hacen referencia a los atributos de la población. 
+
+
+### Estimadores puntuales, intervalos de confianza y test de hipotesis
+
+Uno de los objetivos principales de la estadística es estimar parámetros desconocidos. Para aproximar estos parámetros, se escoge un estimador, es decir, una función que depende de observaciones tomadas aleatoriamente (muestra). Ej.: Media.
+
+
+El estimador nos devuelve un número. Esto es una inferencia de cuál creemos que es la media. Pero no es seguro que esa sea realmente la media. Esto es lo que denominamos estimación puntual.
+
+A diferencia de los estimadores puntuales, los intervalos de confianza estiman un parámetro especificando un rango de posibles valores. Dicho intervalo está asociado con un nivel de confianza, que se define como la probabilidad que el procedimiento usado para generar el intervalo produzca un intervalo que contenga el parámetro verdadero.
+
+
+Por su parte, también podemos calcular la probabilidad de que el parámetro poblacional sea mayor, menor o igual a un cierto valor. Esto es lo que se conoce como test de hipótesis.
+Los tests se construyen con dos hipótesis: La hipótesis nula y la hipótesis alternativa. Lo que buscamos es ver si hay evidencia suficiente para rechazar la hipótesis nula.
+
+
+Significatividad en los tests: Muchas veces decimos que algo es “estadísticamente significativo”. Detrás de esto se encuentra un test de hipótesis que indica que hay una suficiente significativdad estadística.
+
+La significatividad estadística (alpha), es la probabilidad de rechazar la hipotesis nula cuando en realidad es cierta. Por eso, cuanto más bajo el valor, más seguros estamos de no equivocarnos. Por lo general testeamos con valores de alpha de 1%, 5% y 10%, dependiendo del área de estudio.
+
+El p-valor es la mínima significatividad para la que rechazo el test. Es decir, cuanto más bajo es el p-valor, más seguros estamos de rechazar  la hipotesis nula.
+
+
+### Gráficos estadísticos
+
+Hay una seríe de gráficos que resultan de utilidad como herramienta para la estadística descriptiva.
+Exploraremos algunos de ellos continuando con los datos de exportación de frutas a partir de la siguiente pregunta: ¿cuáles son los países receptores del mayor volúmen de frutas?
+
+Para responder nuestra pregunta con esos datos, deberíamos primero agrupar por país de destino y calcular la cantidad de toneladas recibidas por cada uno.  
+
+```{r Tranformar1}
+
+toneladas_por_pais <- frutas %>% 
+  group_by(pais_destino) %>% 
+  summarise(toneladas_fruta = sum(totales)) %>% 
+  ungroup() %>% 
+  arrange(desc(toneladas_fruta))
+
+
+head(toneladas_por_pais)
+```
+
+Ya transformamos los datos para que se ajusten a nuestra pregunta, vamos a utilizar visualizaciones para ver cómo se distribuyen.  
+
+
+#### Gráfico de dispersión
+
+Un gráfico de dispersión es un resúmen interesante de datos numéricos cuando el conjunto de
+datos es razonablemente pequeño o existen pocos valores de datos distintos. Cada observación está representada por un punto. Nos da información sobre la localización, dispersión, valores extremos y brechas.
+
+
+Veamos ahora un primer gráfico de dispersión (también denominados **scatterplot**) que nos muestre la dispersión de los datos en la variante "exportación de frutas por pais de destino".  
+
+
+```{r Primer grafico}
+
+ggplot(data = toneladas_por_pais) +
+      geom_point(aes(x = pais_destino, y = toneladas_fruta)) # gráfico de puntos
+
+```
+
+
+Nos brinda algo de información sobre la distribucíon: hay un grupo mayoritario de países con bajos volúmenes en toneladas, otro grupo con valores intermedios y tres puntos que se destacan claramente por el volúmen recibido.
+Dado que no se lee bien el eje x, podemos reemplazar los puntos por etiquetas o **labels** con el nombre de cada país para ver rápidamente cuáles estoy observando.  
+
+```{r Etiquetas}
+ggplot(data = toneladas_por_pais) +
+  geom_label(aes(x = pais_destino, y = toneladas_fruta, label = pais_destino))
+```
+
+Ahora observamos con el nombre de Otros lo que parece ser una agrupación de países no enumerados que en conjunto recibieron la mayor cantidad de toneladas en el período evaluado.
+
+
+#### Histogramas
+
+Los histogramas son gráficos comunmente usados para mostrar la distribución de los datos de una variable continua (como precios, toneladas, etc). El histograma permite decir si los valores que toma cada observación se agrupan en torno a un valor “típico” o medio -como en el caso de la llamada distribución normal-, o en torno a dos valores frecuentes (distribución bimodal), o con dispersión sin picos ni valles, donde no hay valores típicos ni atípicos - distribución uniforme. Esto suena complicado, pero visualmente es fácil de ver.  
+Analicemos la distribución de los datos que estuvimos viendo. 
+
+Hacer un histograma es simple con **geom_histogram()** sólo hay que elegir una variable y asignarla a las x. Si no aclaramos en cuántas partes queremos que el histograma se divida, lo hará en 30 partes o "bins" por default.  
+
+```{r Histograma}
+ggplot(toneladas_por_pais) + 
+    geom_histogram(aes(x = toneladas_fruta))
+```
+
+Como pudimos observar con el scatterplot, vemos una distibución no uniforme, con muchos países con baja cantidad de toneladas, algunos países en valores intermedios y unos pocos con un volúmen francamente mayor.
+
+#### Gráficas de caja
+Estos gráficos nos permiten conocer con mayor precisión la distribución de los datos, visualizando el centro (mediana), la dispersión (cuartos), simetría y valores extremos. 
+
+```{r}
+toneladas_por_pais_anio <- frutas %>% 
+  group_by(pais_destino, año) %>% 
+  summarise(toneladas_fruta_anual = sum(totales)) %>% 
+  ungroup() %>% 
+  arrange(desc(toneladas_fruta_anual))
+
+
+ggplot() +
+  geom_boxplot(data = toneladas_por_pais_anio, aes(x= pais_destino, y = toneladas_fruta_anual))
+```
+
+
+
+
+---------------------------------------------------------------------------------------
+
+# Cierre
+
+## Comunidades
+
+### R en Buenos Aires
+
+* Twitter: https://twitter.com/renbaires?lang=es
+* Meetup: https://www.meetup.com/es/renbaires/
+* Github: https://renbaires.github.io/
+* Slack: http://renbaires.slack.com
+
+### Stack overflow
+
+https://stackoverflow.com/
+
+### R Studio Blog
+
+https://blog.rstudio.com/categories/news/
+
+### R Project
+
+https://www.r-project.org/
+
+
+
+
+

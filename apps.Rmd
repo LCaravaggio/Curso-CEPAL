@@ -1,0 +1,264 @@
+---
+title: "Apps interactivas"
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: cosmo
+    highlight: tango
+date: "Septiembre de 2020"
+lang: es
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(warning=F, message=F, echo=T, fig.width=15)
+library(tidyverse)
+library(glue)
+```
+
+
+Motivación
+----------
+
+RMarkdown ofrece la posibilidad de incluir interactivdad pero del lado del cliente (_**client-side** interactivity_); esto quiere decir que el usuario del documento HTML puede hacer uso de componentes interactivos sin necesidad de conectarse a R o un servidor. Esto es posible porque estos componentes ya están implementados en HTML y JavaScript. 
+
+Si bien indudablemente esto es una ventaja, también es una limitación porque limita el rango de aplicaciones que podemos hacer desde R. Para poder ampliar las posibilidades y dotar de **interactividad** a cualquier análisis implementado en R es necesario o bien que el usuario pueda correr R o que la interactividad sea **_server-side_**, es decir, esté garantizada por un servidor con R.
+
+La librería que permite crear contenido interactivo usando código R es **`shiny`**.
+
+Shiny
+-----
+
+_Grosso modo_ existen dos formas de generar documentos interactivos con `shiny`:
+
+1. Usando **_Shiny Documents_**: son documentos HTML que se generan a partir de un archivo `.Rmd`. Funcionan con la misma estructura que los archivos RMarkdown, pero con algunas configuraciones adicionales para embeber componentes interactivos con una instancia de R que corre por detrás. Hay más detalles sobre este abordaje en [el libro de bookdown](https://bookdown.org/yihui/rmarkdown/shiny-documents.html). 
+
+2. Usando **_Shiny apps_**: son documentos HTML con la estructura de un sitio web. Se generan exclusivamente a partir de archivos `.R` que usan la librería `shiny` y tienen una estructura específica. La ventaja de este enfoque es que nos provee un framework en el entorno R para generar aplicaciones relativamente complejas y elegantes sin necesidad de tener conocimiento de los lenguajes tradicionales de diseño web (HTML, JavaScript, CSS). 
+
+En este documento vamos a describir los fundamentos de la creación de apps con el segundo abordaje. Siempre es útil tener el [Shiny Gallery](https://shiny.rstudio.com/gallery/) a mano para dimensionar las posibilidades que ofrece Shiny y para escribir desde cero la menor cantidad de código posible.
+
+### Estructura de una Shiny app
+
+Una app de `shiny` tiene dos componentes elementales:
+
+- un **objeto `ui`** (_user interface_, UI): define el _layout_ y la apariencia de la app -- hace las veces de **_front-end_**
+- una **función `server`**: define las instrucciones para generar el output que se visualiza en la UI -- es el **_back-end_**
+
+Estos dos componentes pueden estar en un mismo script llamado `app.R`, o bien en dos scripts separados, `ui.R` y `server.R`. La práctica recomendable es que estos scripts y cualquier otro componente necesario para que corra la app (otros scripts, datos, imágenes, etc.) se ubiquen en un **directorio único**.
+
+La app se pone en marcha con una corrida de la función `shinyApp(ui=ui, server=server)`. También podemos usar la sintaxis `shinyApp("directorio_de_app")`, que reconoce la existencia del par `ui`-`server` en el directorio donde vive la app.
+
+Cuando llamamos esta función desde nuestra sesión, generamos una nueva **sesión de la app** y R pasa a encargarse de ejecutarla, por lo que no podemos usar esa sesión de R para otra cosa hasta que no apaguemos la app. Cada ejecución que se hace genera una sesión distinta e independiente, ya sea que se trate del mismo usuario o de usuarios distintos.
+
+
+User Interface
+--------------
+
+Construir una **UI** en `shiny` equivale a usar las funciones de `shiny` para definir la **disposición** y el **aspecto** de los componentes HTML de nuestro sitio web. Los layouts posibles están basados en el framework [Bootstrap](https://getbootstrap.com/).
+
+Todo lo que generemos dentro del objeto `ui` devuelve como resultado código HTML. Esto quiere decir que podemos ejecutar en la consola cualquiera de las funciones que veremos a continuación, y obtendremos como resultado el código HTML que está detrás de escenas.
+
+### Layout
+
+En general la UI de una sola página se define dentro de un llamado a la función **`fluidPage()`**, la cual crea un _display_ que se ajusta automáticamente a la dimensión del navegador del usuario. Todos los componentes visuales de la app se definirán dentro de `fluidPage()`.
+
+Si bien hay muchas formas de definir el layout de una página, la más flexible es usar el sistema de grilla. Un componente se define a nivel fila con `fluidRow()`, y al interior se definen columnas con `column()`. Cada `fluidRow` puede tener hasta 12 columnas de tamaño 1 (o menos columnas pero más anchas, pero siempre con un máximo ancho de 12).   
+
+![Fuente: https://www.w3schools.com/bootstrap/bootstrap_grid_system.asp](img/bootstrap-grid.png)
+
+![Fuente: https://mastering-shiny.org/basic-ui.html#layout](img/shiny-grid.png)
+
+Algunas alternativas o extensiones interesantes son:
+
+- Usar `sidebarLayout()` con `mainPanel()` y `sidebarPanel()` en lugar del layout de grilla, para generar un panel central y otro lateral.
+- Usar `navbarPage()` y `tabPanel()` en lugar de `fluidPage()` para crear una app con muchas pestañas.
+- Usar `wellPanel()` dentro de `fluidRow()` y `column()` para separar el contenido en paneles.
+- Usar las funciones de [`shinydashboard`](https://rstudio.github.io/shinydashboard/index.html) 
+
+Para ver otras opciones tradicionales referirse a [la guía oficial](https://shiny.rstudio.com/articles/layout-guide.html).  
+
+### Controles de input
+
+Los "controles de input" (**_input controls_** o también _widgets_) son componentes con el cual el usuario puede interactuar con la app. Los controles captan **eventos del usuario**; en general se tratan de inputs que reciben valores determinados por el usuario. De esta manera podemos crear _outputs_ reactivos, es decir, que respondan a las acciones del usuario.
+
+Los _widgets_ se generan creando funciones de input dentro del objeto `ui`. Estas funciones siempre tienen un primer argumento de **`inputId`** y un segundo argumento de **`label`**.
+
+El `inputId` es un **identificador** para conectar los inputs con los outputs que va a devolver la aplicación. Solo puede tener letras, dígitos y guiones bajos y debe ser un **nombre único**. Desde la función de `server` podremos acceder a los inputs con `input$inputId`.
+
+En el `label` en general se incluye información auxiliar para facilitar el uso de la app.
+
+Muchas de las funciones tienen un parámetro de `value` para fijar el valor default del input. El resto de los parámetros depende de cada _widget_, como se observa en la imagen:
+
+![](img/shiny-inputs-01.png) ![](img/shiny-inputs-02.png)
+
+Fuente: https://github.com/rstudio/cheatsheets/blob/master/shiny.pdf
+
+### Controles de output
+
+Los "controles de output" son funciones que determinan en qué lugar de la app se introducen los **outputs**: generalmente texto, tablas y gráficos. Cada función de output que se incluye en `ui` se corresponde con una función _render_ del lado de `server`, como veremos más adelante.
+
+El primer argumento de las funciones de output siempre es un `outputId` único, al igual que en los inputs. Desde la función de `server` podremos acceder a los outputs con `output$outputId`.
+
+En la columna derecha de la siguiente imagen vemos algunas funciones de output típicas, con su correspondiente función _render_ a la izquierda.
+
+![Fuente: https://github.com/rstudio/cheatsheets/blob/master/shiny.pdf](img/shiny-outputs.png)
+
+Reactividad
+-----------
+
+Una característica fundamental de `shiny` que lo vuelve distinto del código R liso y llano es que hace uso de **programación reactiva**. Esto significa que el código no se ejecuturá linea tras linea como en un script tradicional, sino según la **red de dependencias** entre inputs y outputs que se defina en el código.
+
+Como programadores no le estamos diciendo a `shiny` cuándo ejecutar operaciones (por ejemplo, mostrar un output al usuario), sino que solamente especificamos la "receta" para generar ese output. `shiny` decidirá cuándo generar los outputs de acuerdo a las acciones de cada usuario. 
+
+Este tipo de funcionamiento se conoce también como **programación declarativa** porque la tarea consiste únicamente en declarar objetivos, restricciones y dependencias -- en cambio la programación típica con R se trata de **programación imperativa** porque ordenamos que los comandos que definimos se ejecuten inmediatamente.
+
+### La función `server`
+
+La función de `server` recibe tres parámetros: `input`, `output` y `session`. Estos objetos son creados por `shiny` cuando se inicia una sesión de la app, por lo cual no debemos generarlos en ningún momento, como haríamos si se tratara de programación tradicional en R.
+
+* El **argumento input**
+
+`input` es una una lista que recibe todos los datos que llegan desde el navegador, en general determinados por el usuario. Cada elemento recibe el nombre del `inputId` fijado en `ui` y contiene el valor del input.
+
+Los elementos de `input` **solo pueden ser leídos**, pero no modificados. Además pueden ser leídos únicamente **dentro de un contexto reactivo**, como veremos en breve.
+
+* El **argumento output**
+
+`output` también es una lista. Cada elemento de esta lista se llena con una función `render` según el tipo de output que se espera, y recibe el nombre del `outputId` correspondiente. 
+
+El formato general de un output es: `output$outputId = renderXYZ({...})`, donde _XYZ_ representa el tipo de output esperado.
+
+Es muy importante que el `outputId` lleve el mismo nombre que el definido en la función de UI. 
+
+Las funciones de _render_ generan un **contexto reactivo** que automáticamente rastrean los inputs de los que depende el output, a la vez que convierten el output en código HTML según el tipo de output especificado. La lectura de la lista `input` **solo se puede hacer dentro de un contexto reactivo**.
+
+En general el argumento de la función `render` se engloba con llaves `{...}` para poder escribir múltiples expresiones en varias lineas -- sin embargo esto no es un requisito si vamos a escribir una sola expresión. 
+
+Es importante saber que los outputs, además de ser reactivos, son **atómicos**: esto quiere decir que cuando se actualizan porque cambia un input, se ejecutan todas las operaciones definidas dentro de `render`, y no necesariamente solo las que dependen del input.
+
+La manera en la que definamos la lectura de los inputs y la generación de los outputs dentro de la función `server` definirá la **red de dependencias** de la app, la cual define a su vez el orden en el que efectivamente se ejecuta el código. Esta red de dependencias se conoce como _reactive graph_.
+
+* El argumento session
+
+El argumento `session` es un objeto que contiene información acerca de la sesión: datos sobre el tipo de dispositivo, el tipo de conexión, el estado de la sesión, etc. No vamos a usar este argumento en esta clase.
+
+### Expresiones reactivas
+
+Las **expresiones reactivas** son funciones especiales que se usan dentro de la función `server`. Sirven para **aislar** pedazos de código de modo tal que se ejecuten automáticamente cuando cambia un input. Las expresiones reactivas **se ejecutan solo cuando es necesario** que se actualicen según la red de dependencias. El resultado que devuelven se guarda _en cache_ y está disponible para ser usado sin necesidad de que se actualice continuamente.
+
+Esto es útil cuando la generación de un output implica ejecutar operaciones que dependen de múltiples inputs, o bien cuando más de un output depende del mismo input. Estas expresiones nos permiten aislar partes que pueden ser computacionalmente costosas para que se actualicen solo cuando es necesario. De esta manera, (a) logramos que la app sea más eficiente en su funcionamiento, y (b) evitamos la duplicación innecesaria de código.
+
+Los contextos reactivos se crean asignando la expresión **`reactive({...})`** a un objeto. Luego podemos invocar esta expresión como una función -- por ejemplo: creamos la expresión con `tabla = reactive({...})` y luego la llamamos con `tabla()`.
+
+Además de `reactive()`, otras expresiones reactivas comunmente usadas son `eventReactive()` y `observeEvent()`.
+
+**`eventReactive()`** se usa para ejecutar una operación solo cuando el usuario realiza un determinado evento (por ejemplo, clickear un botón). Esto permite que el usuario pueda definir varios inputs usando _widgets_ sin que se actualicen los resultados -- los outputs se van a actulizar solo cuando se registre el evento. Si hay muchos inputs y si los resultados son potencialmente costosos de generar, esto puede ser muy útil.
+
+**`observeEvent()`** cumple el mismo objetivo que `eventReactive()`. La diferencia es que se usa para realizar operaciones "secundarias" no relacionadas con los outputs de la app: por ejemplo, guardar un archivo, enviar un mensaje a la consola (para debuggear), etc. 
+
+Por último, una función muy útil para lidiar con la reactividad es `isolate()`. Esta función toma como argumento un input -- por ejemplo, `isolate(input$Input01)` -- y se escribe en un contexto reactivo para evitar que cambios en el input afecten automáticamente a la expresión reactiva. Esto se usa en general para impedir que cambios en inputs de poca importancia generen inmediatamente corridas computacionalmente costosas.
+
+Otros
+-----
+
+### Scripts y carga de datos
+
+En general hay ciertas aspectos de una app que no dependen de la sesión, es decir, que no dependen de las acciones del usuario -- por ejemplo, la carga de datos iniciales o el `source` de funciones _helpers_ que desarrollamos fuera del entorno de la app. 
+
+Una buena idea es ejecutar estas operaciones una única vez al iniciar la app. Esto se puede lograr 
+
+(a) escribiendo este código al comienzo de `app.R`
+
+(b) escribiendo el código en un script `global.R` si trabajamos en el esquema de dos scripts `ui.R` y `server.R`
+
+De esta manera optimizamos el funcionamiento de la app y dejamos el código más ordenado.
+
+### Plantillas
+
+Podemos usar la librería `shinythemes` para acceder a las plantillas de bootstrap y darle otro estilo visual a nuestras apps. Esto se puede lograr con el argumento `theme` de `fluidPage()`: `fluidPage(theme=shinythemes::shinytheme(theme), ...)`.
+
+Las plantillas disponibles se pueden explorar en el [Shiny theme Selector](https://shiny.rstudio.com/gallery/shiny-theme-selector.html).
+
+Además, la librería [`fresh`](https://github.com/dreamRs/fresh) ofrece la posibilidad de crear plantillas propias con poco esfuerzo.
+
+### Tags HTML
+
+En el layout de la UI podemos incluir **tags HTML** usando las funciones de `shiny` que llevan el mismo nombre que el tag. Por ejemplo, para introducir un header `<h1>Titulo</h1>` usamos `h1("Titulo")` en el interior de cada función `fluidRow()` y/o `column()`. En el [glosario de tags de Shiny](https://shiny.rstudio.com/articles/tag-glossary.html) tenemos una descripción detallada de cada tag.
+
+![Fuente: https://shiny.rstudio.com/tutorial/written-tutorial/lesson2/](img/shiny_html.png)
+
+En la función de cada tag podemos usar argumentos que representan los atributos de los tags HTML. Uno de los argumentos que sirve para casi cualquier componente HTML es `style`. Por ejemplo, `h1("Titulo", style="color:blue;text-align:right")` equivale a `<h1 style="color:blue;text-align:right">Titulo</h1>`. Podemos ver más posibilidades estilo en [el tutorial de w3schools](https://www.w3schools.com/html/html_styles.asp). Otro atributo importante es `href`, que nos permite incluir hipervínculos.
+
+### Imágenes
+
+Cualquier imagen que querramos incluir en una app debe estar en un subdirectorio `/www`. De esta manera podemos incluirla usando la función `img(src="imagen.png", height=140, width=100)`. 
+
+### Modos de display
+
+Para mostrar el **código a la par de la app** podemos usar `shinyApp(..., display.mode="showcase")`. 
+
+Otra posibilidad es un incluir un archivo llamado `DESCRIPTION` (sin extensión) con la siguiente estructura:
+
+```
+Title: Clustering Jerárquico
+Author: Francisco Valentini
+AuthorUrl: github.com/ftvalentini
+DisplayMode: Showcase
+Tags: hierarchical-clustering
+Type: Shiny
+```
+
+`DisplayMode: Showcase` muestra el código debajo de la app y `DisplayMode: Normal` lo oculta.
+
+También se puede incluir un archivo `Readme.md` con una descripción de la app, que aparece junto al código cuando estamos en modo _showcase_. 
+
+### Extensiones
+
+Existen muchas librerías para mejorar el aspecto visual de nuestras apps. Dos de de las más interesantes son [`shinydashboard`](https://rstudio.github.io/shinydashboard/index.html) y [`shinyWidgets`](https://github.com/dreamRs/shinyWidgets).
+
+`shinydashboard` reemplaza el `fluidPage()` por `dashboardPage()` para darle a la UI un formato de _dashboard_.
+`shinyWidgets` ofrece alternativas elegantes a los _widgets_ disponibles en `shiny`.
+
+
+### Compartir y publicar
+
+Hay dos formas generales de compartir una shiny App: compartir los scripts o _hostear_ un sitio web.
+
+#### Compartir scripts
+
+Esta es la forma más sencilla pero al mismo tiempo potencialmente problemática. Cuando queremos que un usuario use nuestra app, le enviamos todos los archivos necesarios para que corra (`ui.R`, `server.R`, `app.R`, `/data`, `/www`, etc.) dentro de una carpeta o `.zip`.
+
+El usuario luego puede correr la aplicación de la misma manera que nosotros durante el desarrollo: desde RStudio o con `shinyApp(...)`. Desde luego esta opción supone que **el usuario tiene una instalación de R propia** que le permita correr los procesos en R del "back-end" de la app. Para evitar problemas de compatibilidades de versiones, muchas veces es útil crear un `requirements.txt` con la versión de R y las versiones de las librerías que usa nuestra app. 
+
+Hay algunas formas de facilitar este proceso. Una de ellas es creando un repositorio en **GitHub** que contenga a los archivos de la app. Luego los usuarios podrán correr la app desde una sesión de R con 
+
+```
+library(shiny)
+runGitHub("<nombre_repositorio>", "<usuario_del_autor>")
+```
+
+#### Compartir como sitio web
+
+La otra opción es hostear la app en un servidor con una instalación de R, de modo que la misma funcione como un sitio web: los usuarios pueden acceder a una URL e interactuar con la aplicación **sin necesidad de contar con una instalación de R**. Esta forma de compartir una shiny app es más trabajosa pero sin lugar a dudas mucho más potente. 
+
+Configurar un servidor para que _hostee_ una shiny app como un sitio web no es para nada una tarea sencilla. Hay algunas opciones disponibles que facilitan esta tarea.
+
+La opción más sencilla es usar [shinyapps.io](https://www.shinyapps.io/). La versión gratuita ofrece un máximo de 5 apps y 25 horas mensuales de actividad. [El tutorial oficial](https://shiny.rstudio.com/articles/shinyapps.html) es muy útil para aprender a hacer la configuración inicial y luego el _deployment_ de las apps.
+
+Otra opción _open-source_ es [ShinyProxy](https://www.shinyproxy.io/). El _setup_ en este caso no es tan sencillo, pero ofrece la ventaja de ser una solución mucho más escalable, segura y profesional para un entorno de producción.  
+
+
+Alternativas
+------------
+
+- [Dash](http://dash.plotly.com/): framework de [plot.ly](https://plotly.com/graphing-libraries/) -- existe [para R](https://dashr.plotly.com/) y [para Python](https://dash.plotly.com/)
+
+- [Bokeh](https://bokeh.org/) para Python
+
+
+Referencias
+-----------
+
+- https://github.com/rstudio/cheatsheets/blob/master/shiny.pdf
+- https://shiny.rstudio.com/tutorial/written-tutorial/lesson1/
+- https://mastering-shiny.org/

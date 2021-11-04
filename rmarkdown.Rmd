@@ -1,0 +1,369 @@
+---
+title: "Comunicación de la información con RMarkdown"
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: cosmo
+    highlight: tango
+date: "Septiembre de 2020"
+lang: es
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(warning=F, message=F, echo=T, fig.width=15)
+library(tidyverse)
+library(glue)
+```
+
+## Motivación
+
+* Integrar el **código** a la comunicación de la **información** de forma transparente y reproducible. Esto es útil para:
+  * **Comunicar** resultados
+  * **Colaborar** con otros analistas
+  * **Documentar** los procesos
+
+## Markdown {#markdown}
+
+**Markdown** es un lenguaje de marcado (*markup language*) que transforma archivos de texto plano en texto con formato. Los archivos escritos en markdown usan la extensión `.md`. Múltiples programas permiten convertir markdown a archivos de uso común como pdf o HTML. Uno de ellos es RStudio.
+
+Algunas reglas básicas para escribir Markdown son:
+
+![Fuente: https://guides.github.com/pdfs/markdown-cheatsheet-online.pdf](img/markdown_cheatsheet.png)
+
+En [este stio](https://markdownlivepreview.com/) se puede probar en vivo cómo funciona Markdown, y en [este link](https://www.markdownguide.org/basic-syntax/) se detallan las características de la sintaxis y las prácticas recomendadas.
+
+## RMarkdown
+
+**RMarkdown** es una versión optimizada de Markdown que tiene como objetivo combinar el texto con formato con las funcionalidades de R. Es una librería para R (`rmarkdown`) que viene directamente con la instalación de RStudio, y se carga por defecto en todas las sesiones. Los archivos usan la terminación `.Rmd`.
+
+Los pasos para pasar desde el archivo original hasta el output deseado son los siguientes:
+
+* `knitr` ejecuta el código y genera un `.md` con código y output
+* `pandoc` procesa el `.md` y devuelve el resultado final según el formato especificado
+
+![Fuente: https://r4ds.had.co.nz/r-markdown.html](img/markdown_process.png)
+
+Este procesamiento --llamado **_rendering_** o **_knitting_**-- se hace vía `rmarkdown::render()` en una instancia nueva de R. Es posible usar esta función para generar resultados de forma programática, como veremos más adelante.
+
+Es importante: 
+
+* Saber que el **working directory** por defecto es el directorio donde vive el archivo `.Rmd`
+* Tener a mano el [cheatsheet oficial](https://github.com/rstudio/cheatsheets/blob/master/rmarkdown-2.0.pdf).
+
+Los componentes de un archivo RMarkdown son:
+
+* **Chunks**: pedazos de código
+* **Texto Markdown**: más precisamente [Markdown de Pandoc](https://pandoc.org/MANUAL.html#pandocs-markdown)
+* **Encabezado YAML**: metadata sobre las características del output
+
+### Chunks
+
+Los pedazos de código se generan con `Ctrl+Alt+I`. Comienzan y terminan con 3 _backticks_ y tienen un encabezado entre llaves con el formato `<lenguaje> <label>, <opcion1=value1>, <opcion2=value2>,...,<opcionN=valueN>`. El **label** es opcional pero es único para cada _chunk_ -- solo admite números, letras y guiones medios. 
+
+Con la librería `reticulate` es posible evaluar _chunks_ escritos en Python, siempre y cuando tengamos una instalación de Python disponible. En [este artículo](https://rstudio.github.io/reticulate/articles/r_markdown.html) se explica en detalle cómo se puede lograr. 
+
+Las **opciones** más importantes de un _chunk_ son:
+
+* `echo`: si es `FALSE` no muestra el código
+* `include`: si es `FALSE` no muestra ni el output ni el código
+* `results`: no muestra el output si es `hide` -- incluye el output "as-is" si es `asis`
+* `eval`: si es `FALSE` no evalúa el código -- es útil para definir si se evalúa un chunk o no sujeto al cumplimiento de una condición evaluada previamente
+* `warning` y `message`: si son `FALSE` no muestran alertas y mensajes 
+* `error`: si es `FALSE` el rendering se frena si hay un error en la ejecución -- usar el `TRUE` es útil para debuggear o para mostrar un error a propósito en el documento final
+* `cache`: si `TRUE` se guarda el output del chunk en un archivo temporal -- el código se ejecuta solo si sufre cambios (ver más detalles en la sección de [R for Data Science](https://r4ds.had.co.nz/r-markdown.html#caching)).
+
+![Fuente: https://r4ds.had.co.nz/r-markdown.html](img/rmarkdown_chunk-options.png)
+
+Algunas de las opciones que determinan las características gráficas del output son:
+
+- `fig.width` y `fig.height` (o `fig.dim`): define el tamaño del _graphical device_ en pulgadas cuando `knitr` genera las imágenes
+- `out.width` y `out.height`: define el tamaño de gráficos en el documento (si se usa un % como `out.width='80%'` quiere decir el 80% del ancho de la página)
+- `fig.align`: definir el alineamiento del plot según `left`, `center` o `right`
+- `fig.cap`: leyenda del gráfico
+- `fig.show`: podemos usar `fig.show='hold'` combinado con `out.width` < 100% permite poner gráficos uno al lado del otro (o en cambio usar `cowplot::plot_grid()`)
+- `fig.pos`: podemos usar `fig.pos='h'` para que los gráficos no floten según las reglas de LaTeX en los documentos PDF
+
+En [la sección 28.7.1 de R for Data Science](https://r4ds.had.co.nz/graphics-for-communication.html#saving-your-plots) podemos consultar algunos tips para controlar el tamaño de las imágenes de forma prolija.
+
+En general **el primer chunk** recibe el label `setup` y determina las opciones comunes a todos los chunks del documento, que se indican con `knitr::opts_chunk$set()`.
+
+La función`knitr::include_graphics()` dentro de un chunk nos permite incluir **imágenes**, pudiendo parametrizar el tamaño de la imagen desde las opciones del chunk. Alternativamente podemos usar la sintaxis Markdown sin configurar el tamaño. 
+
+Podemos mostrar **tablas con formato** con la función `knitr::kable()`.
+
+Para debuggear en caso de que falle el rendering, es útil correr todos los chunks desde la sesión (`Ctrl+Alt+R`).
+
+### Markdown
+
+Además de la sintaxis convencional de markdown descrita [más arriba](#markdown), RMarkdown permite usar las siguientes funcionalidades. 
+
+* **Código in-line**
+
+```{r}
+x = 5
+y = sqrt(x)
+# La raíz cuadrada de `r x` es `r format(y, digits=4)`
+
+```
+
+La raíz cuadrada de `r x` es `r format(y, digits=4)`.
+
+* **Referencias**
+
+Incluir referecias a secciones con `\@ref(section-id)`. El id de una sección se agrega al final del nombre de la siguiente manera:
+
+```
+### Sección 1 {#seccion-01}
+```
+
+Esta manera requiere que determinemos `output: bookdown::html_document2` en el YAML. Esto indica que habilitamos la librería [`bookdown`](https://bookdown.org/) para usar algunas funcionalidades útiles para generar artículos e informes. 
+
+También nos podemos referir a una sección de forma in-line escribiendo `[texto](#section-id)`. 
+
+* **Referencias bibliográficas**
+
+Para citar bibliografía podemos usar `@id`, `[id]`, `[@id1; @id2]`, `@id [p. 88 cap. 4]` según el `id` definido en un archivo `.bib`. Los archivos `.bib`se indican en el YAML como veremos más adelante.
+
+Una entrada en `.bib` tiene un estilo como el siguiente:
+
+```
+@article{ksd,
+  author = {Daniel Peña and Francisco J Prieto},
+  title = {Combining Random and Specific Directions for Outlier Detection and Robust Estimation in High-Dimensional Multivariate Data},
+  journal = {Journal of Computational and Graphical Statistics},
+  volume = {16},
+  number = {1},
+  pages = {228-254},
+  year  = {2007},
+  publisher = {Taylor & Francis},
+  URL = {https://doi.org/10.1198/106186007X181236}
+}
+```
+
+Las referencias se incluyen automáticamente al final como bibliografía, por lo cual al trabajar con documentos PDF es conveniente incluir un encabezado al final del tipo `# Bibliografía`.
+
+- **Imágenes**
+
+Se incluyen con `![leyenda](imagen.png)`.
+
+- *etc.*
+
+En la [documentación de pandoc](https://pandoc.org/MANUAL.html#pandocs-markdown) hay más detalles disponibles, por ejemplo, para generar listas más elegantes, escribir tablas con formato, etc.   
+
+### YAML
+
+Los documentos .Rmd llevan un encabezado en lenguaje **YAML** (_YAML Ain't Markup Language_) donde se establece la **configuración general** del formato del documento. Por ejemplo, el YAML de este documento es similar a:
+
+```
+---
+title: "Comunicación de la información"
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+date: 'Septiembre de 2020'
+---
+```
+
+YAML tiene una estructura **_key: value_**, donde el _key_ indica la opción a configurar y _value_ la configuración determinada que elegimos. A continuación revisamos algunos de las opciones más relevantes.
+
+#### Tipos de documento
+
+Se fija con la opción **`output:`**. Determina el tipo de documento que se genera al procesar el `.Rmd`. Los valores más populares son `html_notebook`, `pdf_document` y `html_document`.
+
+**`html_notebook`** permite correr chunks y ver los resultados interactivamente en el editor, así como también correr código linea por linea. Por eso es una buena opción para usar durante el desarrollo de un `html_document`.
+
+Además `html_notebook` incluye siempre el código. Genera automáticamente un archivo `.nb.html` que se puede visualizar en un browser, así como también editar desde RStudio (cuando se abre un _notebook_ se recrea el `.Rmd` que lo generó, en caso de no existir).
+
+Por último, en las notebooks no necesariamente ocurre el _knitting_; en cambio, funcionan con un _preview_ con los outputs que se van generando interactivamente y el texto Markdown. Estos _previews_ se van guardando automáticamente cada vez que se guarda el `.Rmd`.
+
+Con `pdf_document` y `html_document` solo es posible visualizar los outputs en la consola.
+
+En el caso de **`pdf_document`**, RMarkdown genera archivos **LaTeX** que se usan para compilar un pdf. Es necesario una instalación de LaTeX para que esto funcione. Una forma muy sencilla de instalar una versión portable es con 
+
+```
+install.packages('tinytex')
+tinytex::install_tinytex()
+```
+
+>Atención: en LaTeX los gráficos "flotan" por defecto
+
+#### Otras opciones
+
+- `theme:` son [los templates disponibles para Bootstrap](https://bootswatch.com/3/), una de las bibliotecas más populares para diseño web. 
+
+- `highlight:` el estilo del texto ingresado como sintaxis (ver este [blog](https://www.garrickadenbuie.com/blog/pandoc-syntax-highlighting-examples/))
+
+- `toc:` genera un índice si es `true`
+
+- `toc_float:` el índice está fijo a la izquierda si es `true`. Permite especificar las sub-opciones `collapsed:` y `smooth_scroll` con `true` o `false`.
+
+- `bibliography:` en documentos PDF se puede escribir,  por ejemplo, `bibliography: ["one.bib", "two.bib"]` para incluir referencias a dos documentos con bibliografía.
+
+Las opciones que están relacionadas con el tipo de output se indican debajo del mismo, de la siguiente manera:
+
+```
+output:
+  html_document:
+    toc: true
+    toc_float: true
+``` 
+
+Para conocer todos las posibles opciones de un tipo de output podemos correr `?rmarkdown::html_document`, por ejemplo.
+
+#### Parámetros
+
+Se definen como:
+
+```
+params:
+  p_01: "x"
+  p_02: 8
+  p_03: !r as.Date("2020-05-05")
+```
+
+Y se pueden llamar en el código mediante `params$p_01` o cuando compilamos el documento usando `rmarkdown::render("documento.Rmd", params = list(p_01 = "x"))`.
+
+Esto es útil para generar múltiples documentos con igual estructura. Por ejemplo:
+
+```
+meses = month.name
+for (m in meses) {
+  output_file = glue('documento_', m, '.html')
+  rmarkdown::render(input='documento.Rmd', output_file=output_file
+                    , params=list(mes=m))
+}
+
+```
+
+## Extensiones
+
+### Widgets interactivos
+
+Los **_widgets_** son pequeños programas que facilitan la visualización de información y en general están diseñados para ser embebidos en otros programas.
+
+En el contexto de RMarkdown podemos usar la librería `htmlwidgets` para acceder de forma muy simple a librerías de visualización muy populares en JavaScript. De esta manera es posible embeber **visualizaciones interactivas** en nuestros documentos con muy poco esfuerzo.     
+
+Cuando usamos estos _widgets_ la interactividad está garantizada desde el navegador por librerías implementadas en HTML y JavaScript --en otras palabras, no es necesaria una conexión activa a R para que funcionen.
+
+Podemos revisar los *widgets* más populares en <http://www.htmlwidgets.org/showcase_leaflet.html> y ver la lista completa en <http://gallery.htmlwidgets.org/>.
+
+- Mapas interactivos con [leaflet](http://rstudio.github.io/leaflet/)
+- Series de tiempo interactivas con [dygraphs](http://rstudio.github.io/dygraphs/)
+- Añadir interactividad a gráficos de `ggplot2` con [plotly](https://plotly.com/r/). Plotly también admite mapas y series de tiempo, entre muchísimas otras opciones.  
+- Gráficos interactivos [highcharter](http://jkunst.com/highcharter/) y [rbokeh](http://hafen.github.io/rbokeh/) -- `highcharter` es libre solo para usos no comerciales
+- Tablas interactivas con [DT](https://rstudio.github.io/DT/) (datatable)
+- Redes interactivas con [visNetwork](https://datastorm-open.github.io/visNetwork/) o [networkD3](http://christophergandrud.github.io/networkD3/)
+- Gráficos 3-D con [rgl](https://cran.r-project.org/web/packages/rgl/vignettes/rgl.html)
+
+La mayor parte de estas implementaciones están diseñadas para ajustarse automáticamente al layout de nuestro documento y son ideales para usar dentro de dashboards.
+
+### Dashboards
+
+Podemos usar el output `flexdashboard::flex_dashboard` para generar **dashboards** con visualizaciones relacionadas (tablas, widgets, gráficos, texto, etc). Los **_flexdashboards_** son muy prácticos porque están optimizados para adaptarse inteligentemente a móvil y desktop, pudiendo mostrar resultados en HTML con un lenguaje de muy alto nivel de tipo RMarkdown.   
+
+#### Layout
+
+La sintaxis para definir el layout de un dashboard es:
+
+* `====` para definir páginas o pestañas; por ejemplo:
+``` 
+pestaña
+=======
+```
+
+* `-----` para definir columnas; por ejemplo: 
+``` 
+columna
+-------
+```
+
+* Header nivel 3 para definir componentes con título; por ejemplo:
+```
+### Gráfico 1
+``` 
+
+La orientación por defecto es por columna: en primer lugar se definen las columnas y dentro de ella la cantidad de filas. Para alterar este comportamiento y trabajar a nivel fila es necesario indicar 
+
+```
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+```
+en el YAML.
+
+Si se desea aplicar a una sola página, se puede hacer con:
+
+```
+Pagina 1 {data-orientation=rows}
+================================
+```
+
+![Fuente: https://rmarkdown.rstudio.com/flexdashboard/using.html](img/dashboard_layout-column.png)
+
+El tamaño relativo de cada _container_ se puede ajustar con la opción `{data-width=...}` y/o `{data-height=...}`, de modo tal que sumen 1000 todos los componentes -- por ejemplo:
+
+```
+Columna {data-width=600}
+-------------------------------------
+
+### Grafico 1
+
+Columna {data-width=400}
+-------------------------------------
+   
+### Grafico 2
+
+``` 
+
+Por defecto el layout se ajusta al alto de la pantalla. Si tenemos muchas visualizaciones podemos modificar esta opción y habilitar el scrolling vertical con `vertical_layout: scroll`.
+
+Con la opción `{.tabset}` podemos generar múltiples pestañas dentro de cada panel del dashboard. 
+
+![Fuente: https://rmarkdown.rstudio.com/flexdashboard/using.html](img/dashboard_tabset.png)
+
+Los themes disponibles son [los mismos que en RMarkdown](https://bootswatch.com/).
+
+#### Contenidos
+
+El contenido de cada **_container_** del layout se construye con _chunks_ o con texto de tipo pandoc Markdown dentro de cada sección. También podemos incluir texto al comienzo del dashboard, por fuera de los _containers_. Otra opción es incluir notas debajo de un chunk usando la sintaxis `> esto es una nota`.  
+
+En general los componentes gráficos se ajustan bien al tamaño de los _containers_ y del monitor. En el caso de trabajar con gráficos estáticos, sin embargo, es necesario ajustar a prueba y error los parámetros `fig.width` y `fig.height` en pulgadas, al tratarse de archivos PNG.
+
+Para mostrar tablas estáticas podemos usar la función `knitr::kable()` al igual que en un RMarkdown tradicional. Para dotar a las tablas con cierta interactividad de tipo _widget_ (filtros, ordenamiento y paginación) está disponible la función `DT::datatable()`.   
+
+Podemos mostrar valores importantes con `valueBox(x, caption="", color="")`. Como valor del argumento `color`, además definir colores de las formas convecionales, podemos elegir entre alguno de los siguientes valores default: "primary", "info", "success", "warning" y "danger". También podemos usar el argumento `href` para generar un hipervínculo a una sección del dashboard, por ejemplo, `href="#seccion1"`. Por último, se pueden mostrar íconos con el argumento `icon="nombre"`, pudiendo elegir opciones de [Font Awesome](https://fontawesome.com/icons?from=io) y [Ionicons](https://ionicons.com/).
+
+Dos ejemplos interesantes de dashboards son https://beta.rstudioconnect.com/jjallaire/htmlwidgets-highcharter/htmlwidgets-highcharter.html y https://jenthompson.me/examples/progressdash.html
+
+Algunas de las otras funcionalidades parametrizables que ofrece `flexdashboard` son:
+
+* [Barra de navegación](https://rmarkdown.rstudio.com/flexdashboard/using.html#navigation_bar)
+* [Padding](https://rmarkdown.rstudio.com/flexdashboard/using.html#size_attributes) en las visualizaciones
+* [Storyboards](https://rmarkdown.rstudio.com/flexdashboard/using.html#storyboards)
+* [Configuraciones para móvil](https://rmarkdown.rstudio.com/flexdashboard/using.html#mobile_layout)
+* [CSS personalizado](https://rmarkdown.rstudio.com/flexdashboard/using.html#css_styles) para configurar el estilo del HTML
+
+## Más extensiones
+
+* Presentaciones de [varios formatos](https://bookdown.org/yihui/rmarkdown/presentations.html) y de [xaringan](https://bookdown.org/yihui/rmarkdown/xaringan.html)
+* [Sitios web](https://bookdown.org/yihui/rmarkdown/rmarkdown-site.html)
+* [Libros](https://bookdown.org/yihui/bookdown/) con `bookdown`
+* [Papers y artículos](https://bookdown.org/yihui/rmarkdown/journals.html) con `bookdown`
+* [Templates HTML](https://github.com/yixuan/prettydoc/)
+* [pagedown](https://github.com/rstudio/pagedown) para convertir HTML en pdf
+* Reproducibilidad de largo plazo ([checkpoint](https://github.com/RevolutionAnalytics/checkpoint) y [packrat](http://rstudio.github.io/packrat/))
+* Publicacion en RPubs o con [RStudio Connect](https://docs.rstudio.com/connect/user/publishing/)
+
+![Publicar un HTML a RPubs](img/publish-rpubs.png)
+
+## Referencias
+
+* https://bookdown.org/yihui/rmarkdown/
+* https://r4ds.had.co.nz/
+* https://rmd4sci.njtierney.com/
+* https://holtzy.github.io/Pimp-my-rmd/
+* https://rmarkdown.rstudio.com/flexdashboard/index.html
+

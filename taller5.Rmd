@@ -1,0 +1,730 @@
+---
+title: "Introduccion a la Ciencia de Datos"
+subtitle: "Clase 5 - Regresion Lineal"
+output: 
+  html_document:
+    #css: ../style.css 
+    fig_height: 8
+    fig_width: 12
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: paper
+editor_options: 
+  chunk_output_type: console
+---
+<style type="text/css">
+body, td {
+   font-size: 16px;
+   font-family: Cambria;
+}
+code.r{
+  font-size: 12px;
+}
+pre {
+  font-size: 12px
+}
+</style>
+```{r options, echo = FALSE}
+
+knitr::opts_chunk$set(warning = FALSE,
+                      error = FALSE,
+                      message = FALSE)
+
+``` 
+
+```{r bibliotecas}
+library(dplyr)
+library(tibble)
+library(ggplot2)
+library(RobStatTM)
+```
+
+# Introducción
+
+La regresion lineal es una de las principales herramientas para el analisis de datos. En este documento presentamos ejemplos de uso de la regresion lineal mediante el lenguaje R. Para ello, utilizamos el dataset **"wage1"** del paquete **wooldridge**, el cual se basa en los ejemplos analizados en el libro de wooldridge, "Introductory Econometrics a Modern Approach".
+
+El objetivo del analisis es estudiar, mediante el dataset **"wage1"**, la contribucion de los años de educacion en el salario. Para acceder al dataset y otras funcionaliades, se pueden instalar el paquete **wooldridge** ejecutando `install.packages("wooldridge")`.
+
+
+# Carga y analisis del dataset
+
+## Carga del dataset
+
+Una forma de levantar los datos en memoria es instalando el paquete **wooldridge**. Una vez que esta instalado hay que cargar la libreria y traer el dataset con la funcion `data()`. En el chunk de abajo incluimos comentados estas lineas de codigo. En este caso levantaos el dataset como csv para evitar errores en el cargado de la libreria.
+
+```{r carga base wage1}
+# install.packages("wooldridge")
+# library(wooldridge)
+# data(wage1)
+wage1 = readr::read_csv("wage1.csv")
+```
+
+Si pudieron instalar bien la libreria **wooldridge**, ejecutando `?wage1()` pueden acceder a una descipcion del dataset y de sus variables. Esto no viene por default, sino que lo tenemos disponible porque la gente que armó el paquete se encargó tambien de subir esta descripción.
+
+
+## Analisis preliminar del dataset
+
+Exploramos la estructura del dataset, las variables que tiene, su tipo y alguna distribucion rapida de los valores. Siempre es util empezar con un `head()` para familiarizarnos con la tabla.
+
+```{r analisis del dataset}
+# uso head para ver las primeras filas del dataset
+head(wage1, 10)
+
+# algunas funciones rapidas para dimensionar los datos
+dim(wage1)
+nrow(wage1)
+
+# nombre de las variables
+colnames(wage1)
+
+# tipo de variables y algunos ejemplos
+glimpse(wage1)
+```
+
+## Selección variables para el analisis
+
+Antes de meternos en el analisis de la distribucion de las variables vamos a quedarnos con las que nos interesan para el analisis.
+
+```{r seleccion de variables}
+# selecciono un grupo de variables
+vs = c('wage', 'educ', 'exper', 'tenure', 'nonwhite', 'female')
+
+# creo un dataset nuevo con estas vars
+wage1_vs = wage1 %>% select(vs)
+
+```
+
+## Distribucion de las variables
+
+Usamsos algunas funciones basicas para tener una primera idea de como se distribuyen las variables.
+
+```{r distribucion de las variables, out.width="60%", fig.align='center'}
+# distribucion de las variables
+summary(wage1_vs)
+
+# histograma para age
+ggplot(wage1_vs, aes(x=wage)) +
+  geom_histogram(bins = 15) +
+  ggtitle("Histograma de Wage") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Wage")
+
+```
+
+```{r distribucion bivariada, out.width="80%", fig.align='center'}
+# transformo las dummies a factor
+wage1_vs = wage1_vs %>% 
+  mutate_at(vars(nonwhite, female), as.factor)
+
+# correlacion (solo aplica para continuas)
+cor(wage1_vs %>% select_if(is.numeric))
+
+# distribucion bivariada
+pairs(wage1_vs %>% select_if(is.numeric))
+
+```
+
+
+# Regresión simple
+
+En esta seccion empezamos a analizar la contribucion de los anos de educación al salario mediate un analisis de regresion simple. 
+
+## Primeros pasos
+
+Cuando se estudia la relación entre dos variables, los graficos de dispersión son una buena herramienta para comenzar el análisis.
+
+```{r analisis grafico, out.width="60%", fig.align='center'}
+# distribucion de las variables
+ggplot(wage1_vs, aes(y=wage, x=educ)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = F, color = 'red') +
+  ggtitle("Grafico de wage y educacion") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Años de educacion") + ylab("Salario") 
+
+```
+Se puede observar que hay una relación positiva (ya lo veíamos con la correlación), pero la relación no parece lineal. Ajustamos un modelo y vemos los resiudos
+
+```{r regresion simple 1}
+# ajusto modelo lineal
+mod1 = lm(data = wage1_vs, wage ~ educ)
+
+# analizo el objeto creado
+mod1
+class(mod1)
+
+# salida completa
+summary(mod1)
+```
+
+Esas lineas son las basicas para ajustar un modelo lineal y analizar los resultados. Ahora veamos qué más hay en el objeto `mod1` que creamos.
+
+```{r regresion simple objeto}
+# coeficientes
+mod1$coefficients
+
+# residuos
+mod1$residuals %>% head()
+mod1$residuals %>% length()
+
+# valores ajustados
+mod1$fitted.values %>% head()
+mod1$fitted.values %>% length()
+
+```
+
+Tambien puedo construir un intervalo de confianza para mi estimador, utilizando el objeto modelo. ¿Es correcto este intervalo?
+
+```{r regresion simple intervalo}
+
+# intervalo de confianza de 90%
+confint(mod1, 'educ', level = 0.9)
+
+# intervalo de confianza de 95%
+confint(mod1, 'educ', level = 0.95)
+
+```
+
+
+## Análisis de residuos
+
+Hacemos un análisis de los residuos para comprobar si hay estructura. Primero, vamos a intentar determinar si siguen una distribución normal. Luego vamos a analizar gráficamente si tienen estructura.
+
+```{r regresion simple residuos 1, fig.show="hold", out.width="50%"}
+# analisis de residuos
+ggplot(data.frame(res=mod1$residuals), 
+       aes(x=res)) +
+  geom_histogram(bins = 15) +
+  ggtitle("Wage y educacion: histograma de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Residuos") + ylab("Frecuencia") 
+
+# analisis de residuos
+ggplot(data.frame(res=mod1$residuals), 
+       aes(x = "", y=res)) +
+  geom_boxplot() +
+  ggtitle("Wage y educacion: boxplot de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) + 
+        ylab("Residuos") + xlab("")
+
+```
+
+```{r regresion simple residuos 2, out.width="60%", fig.align='center'}
+# analisis de residuos
+ggplot(data.frame(res=mod1$residuals, fit=mod1$fitted.values), 
+       aes(y=res, x=fit)) +
+  geom_point() +
+  ggtitle("Wage y educacion: analisis de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Valores ajustados") + ylab("Residuos") +
+  geom_smooth(method = "loess", se = F)
+
+```
+
+## Transformación de las variables
+
+Como vemos, los residuos presentan estructura, lo cual es evidencia en contra de los supuestos que plantea la regresion lineal para la inferencia. Una alternativa para solucionar esto es realizar transformaciones en las variables para ver si mejora el ajuste. Hay que tener en cuenta que esto modifica la interpretación de los efectos.
+
+Para elegir las transformaciones es bueno revisar la literatura para ver casos de estudio parecidos. Por ejemplo, en el caso de los salarios, se suele usar la transformacion logaritmica. Veamos si mejora el ajuste.
+
+```{r transformacion logaritmica, out.width="60%", fig.align='center'}
+# genero salarios en log
+wage1_vs = wage1_vs %>% 
+  mutate(lwage = log(wage))
+
+# ajusto el modelo
+mod2 = lm(data = wage1_vs, lwage ~ educ)
+summary(mod2)
+
+# ploteo de nuevo con log-nivel
+ggplot(data.frame(res=mod2$residuals, fit=mod2$fitted.values), 
+       aes(y=res, x=fit)) +
+  geom_point() +
+  ggtitle("Wage (en log) y educacion: analisis de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Valores ajustados") + ylab("Residuos") +
+  geom_smooth(method = "loess", se = F)
+```
+
+
+```{r mas transformaciones, out.width="60%", fig.align='center'}
+
+# veo si pasando educ a log mejor un poco mas
+wage1_vs = wage1_vs %>% 
+  mutate(leduc = log(educ+1))
+
+# ajusto el modelo
+mod3 = lm(data = wage1_vs, lwage ~ leduc)
+summary(mod3)
+
+# ploteo de nuevo con log-log
+ggplot(data.frame(res=mod3$residuals, fit=mod3$fitted.values), 
+       aes(y=res, x=fit)) +
+  geom_point() +
+  ggtitle("Wage (en log) y educacion (en log): analisis de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Valores ajustados") + ylab("Residuos") +
+  geom_smooth(method = "loess", se = F)
+```
+
+## Comparacion de los modelos simples
+
+Por ahora no hay ningun modelo que aparezca como preferido. Tomado como base la transformacion en log del salario, comparamos los tres modelos con las transformaciones de educación. Una forma posible en este caso, es comparando el R2 (vamos a ver más adelante que esto no es siempre así).
+
+```{r comparacion, out.width="60%", fig.align='center'}
+
+# modelo log-nivel
+mod2 = lm(data = wage1_vs, lwage ~ educ)
+summary(mod2)$r.squared
+
+# modelo log-log
+mod3 = lm(data = wage1_vs, lwage ~ leduc)
+summary(mod3)$r.squared
+
+
+```
+
+
+# Regresión múltiple
+
+En este apartado vamos a complejizar un poco el analisis que veniamos haciendo. Por un lado, en caso de que exista alguna variable que este vinculada a los años de educación y también al salario, si no incluimos  esta variable en el modelo, nuestro estimador va a ser sesgado. Es decir, el efecto que captaba el beta para medir la relación entre educación y salario estaba mal. Por otro lado, analizaremos la inclusión de variables categóricas.
+
+
+## Inclusión de variables relevantes
+
+En este caso, podemos pensar que para nuestro modelo es necesario incluir los años de experiencia laboral (también hubiese sido interesante contar con la variable edad de las personas). Es de esperar (y algo se veía en los gráficos) que los años de experiencia influyan positivamente en el salario. Tambien veíamos que los años de educación están correlacionados negativamente con los de experiencia (tiene sentido). De no controlar por esta variable, estaríamos subestimado el coeficiente. Veamos que pasa si la sumamos.
+
+```{r modelo multiple}
+
+# estimo log-nivel y controlo por exper
+modmul1 = lm(data = wage1_vs, lwage ~ educ + exper)
+summary(modmul1)
+
+# comparo el beta con el modelo sin exper
+modmul1$coefficients
+mod2$coefficients
+
+# calculo el sesgo que tenia 
+mod2$coefficients['educ'] - modmul1$coefficients['educ']
+```
+
+Como se ve, el coeficiente estimado anteriormente tenia un sesgo negativo. Analizamos ahora los residuos de nuestro modelo a ver si con esto mejora el ajuste. 
+
+```{r modelo multiple residuos, out.width="60%", fig.align='center'}
+
+# analisis de residuos
+ggplot(data.frame(res=modmul1$residuals, fit=modmul1$fitted.values),
+       aes(y=res, x=fit)) +
+  geom_point() +
+  ggtitle("Modelo múltiple: análisis de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Valores ajustados") + ylab("Residuos") +
+  geom_smooth(method = "loess", se = F)
+
+```
+
+Si bien parece haber una mejora, los residuos siguen teniendo estructura. Para ver si podemos lograr un mejor ajuste, incluimos la variable `tenure`, la cual tienía bastante correlación con los salarios. Para comparar el modelo, vamos a volver a analizar los residuos y también vamos a mirar el R2 ajustado.
+
+```{r modelo multiple2, out.width="60%", fig.align='center'}
+# estimo log-nivel y controlo por exper
+modmul2 = lm(data = wage1_vs, lwage ~ educ + exper + tenure)
+summary(modmul2)
+
+# comparo el beta con el modelo sin exper
+modmul2$coefficients
+mod2$coefficients
+
+# calculo el sesgo que tenia 
+modmul1$coefficients['educ'] - modmul2$coefficients['educ']
+
+# analisis de residuos
+ggplot(data.frame(res=modmul2$residuals, fit=modmul2$fitted.values),
+       aes(y=res, x=fit)) +
+  geom_point() +
+  ggtitle("Sumo exper y tenure: analisis de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  xlab("Valores ajustados") + ylab("Residuos") +
+  geom_smooth(method = "loess", se = F)
+
+```
+
+En este caso, vemos que el coeficiente de educ casi no se modificó, sin embargo, con la inclusión de la variable `tenure` logramos un mejor R2 ajustado, y también vemos una mejora en el gráfico de residuos. Sigue persisiendo estructura en los valores más bajos, más adelante nos detendremos en esas observaciones.
+
+
+## Variables categóricas
+
+Vamos a incluir la variable `female` en el modelo. Esta es una variable categórica, que toma valor 1 para las mujeres y 0 para el resto de personas. El coeficiente de esta variable nos indicará si existe un diferencial en el salario percibido por las mujeres, ceteris paribus el resto de las variable que incluímos en el modelo como control.
+
+
+```{r modelo multiple cat, out.width="60%", fig.align='center'}
+# incluyo var categorica female
+modmul3 = lm(data = wage1_vs, lwage ~ educ + exper + tenure + female)
+summary(modmul3)
+```
+
+Como podemos ver, el coeficiente estimado es negativo y significativo. Esto indica que en este dataset en promedio, las mujeres perciben salarios más bajos, aún cuando controlamos por otras variables comolos años de educación, experiencia laboral y antiguedad. 
+
+A continuación ploteamos la relación entre el salario (en log) y los años de educación, explicitando esta diferencia que existe para las mujeres.
+
+```{r modelo multiple cat plot, out.width="60%", fig.align='center'}
+
+# plot
+ggplot(wage1_vs, aes(y=lwage, x=educ, color = female)) +
+  geom_point() +
+  ggtitle("Grafico de wage y educacion (log-nivel)") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) + xlab("Años de educacion") + ylab("Salario (en log)") +
+  geom_abline(slope = modmul3$coefficients['educ'],
+            intercept = modmul3$coefficients[1],
+            color = "pink", size = 1) +
+  geom_abline(slope = modmul3$coefficients['educ'],
+            intercept = modmul3$coefficients[1]+modmul3$coefficients['female1'],
+            color = "turquoise", size = 1) 
+
+``` 
+
+La otra variable que podemos usar para analizar si existen diferencias entre grupos es `nonwhite`. Sin embargo, como se muestra abajo, el coeficiente en este caso no es significativo, lo que parecería indicar que controlando por las variables que incluimos en el modelo no existen diferencias raciales en los salarios en el dataset.
+
+```{r modelo multiple cat2, out.width="60%", fig.align='center'}
+# incluyo var categorica female
+modmul4 = lm(data = wage1_vs, lwage ~ educ + exper + tenure + nonwhite)
+summary(modmul4)
+```
+
+## Interacciones
+
+En la sección anterior pudimos identificar un gap en los salarios percibidos por las mujeres. En este apartado buscaremos estudiar si la relación entre los años de educación y el salario también es distinta según el genero. Para eso, incluiremos en el modelo un término de interacción entre `female` y `educ`.
+
+```{r modelo multiple inter}
+
+# interacccion
+modmul5 = lm(data = wage1_vs, lwage ~ educ + exper + tenure + female + educ*female)
+summary(modmul5)
+```
+
+En este caso el coeficiente no es significativo, y de hecho dejó de ser significativo el coeficiente de la variable `female`. Eso se puede deber a que la nueva variable que incluimos como interacción capta parte del efecto de esta variable. Más allá de la significatividad, se ve que el beta de la interacción es negativo, lo cual indica que a las mujeres se les retribuye menos por sus años de educación.
+
+
+```{r modelo multiple interact, out.width="60%", fig.align='center'}
+
+# plot
+ggplot(wage1_vs, aes(y=lwage, x=educ, color = female)) +
+  geom_point() +
+  ggtitle("Grafico de wage y educacion (log-nivel)") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) + xlab("Años de educacion") + ylab("Salario (en log)") +
+  geom_abline(slope = modmul5$coefficients['educ'],
+            intercept = modmul5$coefficients[1],
+            color = "pink", size = 1) +
+  geom_abline(slope = modmul5$coefficients['educ']+modmul5$coefficients['educ:female1'],
+            intercept = modmul5$coefficients[1]+modmul5$coefficients['female1'],
+            color = "turquoise", size = 1) 
+
+``` 
+
+# Análisis de outliers
+
+En esta sección vamos a analizar el caso de observaciones atípicas. Vamos a empezar con el modelo simple, donde solo regresabamos el salario con la educación. Luego haremos un análisis un poco más complejo para el caso del modelo múltiple.
+
+
+## Outliers en el modelo simple
+
+En los primeros gráficos veíamos un comportamiento distinto para las observaciones donde los niveles de educación eran muy bajos. Vamos a utilizar la función `hatvalues` para comprobar que el leverage de esas observaciones era alto. 
+
+Si bien no existe un número exacto para considerar que el leverage es alto, se suele tomar como criterio `hatvalues` tres veces mayores al primedio (`hatvalues > (3 * mean(hatvalues)` ) 
+
+```{r outliers modelo simple, out.width="60%", fig.align='center'}
+
+# leverage
+hv_mls = hatvalues(mod1)
+length(hv_mls)
+
+# con la funcion wich() puedo filtrar por el index 
+ms_outliers = which(hv_mls > (mean(hv_mls)*3))
+wage1_vs[ms_outliers,]
+
+# repaso la distribucion de educ
+ggplot(wage1_vs, aes(x=educ)) +
+  geom_histogram(bins = 15) +
+  ggtitle("Histograma de años de educación") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  
+  xlab("Años de educacion") + ylab("Frecuencia")
+```
+
+Efectivamente vemos que las observaciones con alto leverage son aquellas en las que los años de educación toman valores bajos. Allí vaíamos que se rompía la relación de esta variable con el salario. Vamos a probar graficamente cómo sería el ajuste del modelo simple sin estas observaciones.
+
+
+```{r outliers ms grafico, out.width="60%", fig.align='center'}
+
+# vuelvo a plotear la relación simple pero sin estos
+ggplot(wage1_vs[-which(hv_mls > (mean(hv_mls)*3)),],
+       aes(y=lwage, x=educ)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F, color = 'green') +
+  geom_abline(slope = mod2$coefficients['educ'],
+              intercept = mod2$coefficients[1],
+              color = "red") +
+  ggtitle("Grafico de wage y educacion (log-nivel)") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  
+  xlab("Años de educacion") + ylab("Salario (en log)") 
+```
+
+En este caso, podemos comprobar que la existencia de outliers no implicó grandes cambios en el ajuste del modelo. Igualmente volvemos a ver el análisis de residuos y vemos que ahora el gráfico se ve mejor.
+
+Para llevar la situación un poco más al extremo, vamos a reducir el tamaño de la muestra, sacando parte de las observaciones que no eran outliers. De esta forma, las observaciones outliers van a tener más peso en el ajuste.
+
+
+```{r outliers caso grave, out.width="60%", fig.align='center'}
+
+# genero un dataset con menos observaciones (dejando los outliers)
+set.seed(1234)
+
+wage2_vs = rbind(
+  wage1_vs[ms_outliers,],
+  wage1_vs[sample(seq(1,nrow(wage1_vs))[-ms_outliers], 100-length(ms_outliers)),])
+
+dim(wage2_vs)
+      
+# ajusto modelo comun
+modoa1 = lm(data = wage2_vs, lwage ~ educ)
+modoa1$coefficients
+
+# ajusto modelo sin outliers
+modoa2 = lm(data = wage2_vs[-(1:length(ms_outliers)),], lwage ~ educ)
+modoa2$coefficients
+
+# plot de la estimacion con efecto outliers exagerado
+ggplot(wage2_vs[-(1:length(ms_outliers)),],
+       aes(y=lwage, x=educ)) +
+  geom_point() +
+  geom_abline(slope = modoa1$coefficients['educ'],
+              intercept = modoa1$coefficients[1],
+              color = "red", size = 1) +
+  geom_abline(slope = modoa2$coefficients['educ'],
+              intercept = modoa2$coefficients[1],
+              color = "green", size = 1) +
+  ggtitle("Modelo Simple: Comparación de ajuste") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  
+  xlab("Años de educacion") + ylab("Salario (en log)")
+```
+
+
+## Outliers en el modelo múltpiple
+
+Para la regresión múltiple el análisis es un poco más complejo. Si bien la forma de detectar observaciones con alto leverage es la misma, con `hatvalues`, en este caso no es tan sencillo entender por qué tienen alto leverage, y tampoco sabemos si estas están forzando un mal ajuste. Empecemos detectando estas observaciones.
+
+```{r outliers modelo multiple}
+
+# leverage
+hv_mlm = hatvalues(modmul4)
+length(hv_mlm)
+
+# me fijo esas observaciones
+wage1_vs[which(hv_mlm > (mean(hv_mlm)*3)),]
+
+```
+
+Para evaluar qué tanto pueden afectar esas observaciones al ajuste del modelo, estimamos un modelo robusto donde las observaciones atípicas influyen menos.
+
+```{r modelo robusto, out.width="60%", fig.align='center'}
+
+# ajusto el modelo robusto
+cont = lmrobdet.control(efficiency=0.85, family="bisquare")
+modrob = lmrobdetMM(data = wage1_vs, lwage ~ educ + exper + tenure + female, control=cont)
+
+# observo los resultados
+summary(modrob)
+
+# comparo con los resultados del modelo lineal
+modmul3$coefficients
+
+ggplot(data=data.frame(res=modmul3$residuals, rrob=modrob$residuals),
+       aes(y=res, x=rrob)) +
+  geom_point() +
+  ggtitle("Modelo múltiple: Comparación de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  
+  xlab("Residuos robustos") + ylab("Residuos")
+
+
+```
+
+Nuevamente vamos a simular una situación para recrear un escanario donde el ajuste robusto podría ayudarnos a detectar una observación que esté generando un mal ajuste del modelo. Como se comentó, esto podría suceder en caso de error en la carga de información.
+
+
+```{r modelo robusto2, out.width="60%", fig.align='center'}
+
+# simulo error de carga en la informacion
+wage3_vs = wage2_vs
+wage3_vs[1,'tenure'] = 150
+
+# ajusto modelo multiple con dataset reducido
+mmuloa = lm(data = wage3_vs, lwage ~ educ + exper + tenure + female)
+mmuloa$coefficients
+
+# reviso los coeficientes
+mmuloarob = lmrobdetMM(data = wage3_vs, lwage ~ educ + exper + tenure + female, control = cont)
+mmuloarob$coefficients
+
+# ploteo los residuos
+ggplot(data=data.frame(res=mmuloa$residuals, rrob=mmuloarob$residuals),
+       aes(y=res, x=rrob)) +
+  geom_point() +
+  ggtitle("Modelo múltiple 2: Comparación de residuos") +
+  theme(plot.title = element_text(size=34, face="bold"),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=24,face="bold")) +  
+  xlab("Residuos robustos") + ylab("Residuos")
+
+```
+
+
+# Ejercicios
+
+En esta sección se incluyen algunos ejercicios para prácticar lo visto arriba relacionado al modelo lineal y algunas cuestiones básicas de manipulación de datos vistas en los talleres anteriores. Para los ejercicios, utilice el dataset `wage1_vs`
+
+
+
+## Primera parte
+
+**Ejercicio 1**
+
+Empezamos con un poco de estadística descriptiva. Realicé un gráfico de boxplot para evaluar si existe una diferencia en el salario respecto a la variable `nonwhite`. Qué observa?
+
+```{r ejercicio 1}
+
+# ejercicio 1
+
+
+```
+
+**Ejercicio 2**
+
+Realice lo mismo para la variable `female`, pero esta vez además incluya colores en las cajas. Qué observa?
+
+```{r ejercicio 2}
+
+# ejercicio 2
+
+```
+
+**Ejercicio 3**
+
+Realice gráfico de dispersión entre la variable `tenure` y la variable `exper`. Incluya el título del gráfico y las etiquetas de los ejes.
+
+```{r ejercicio 3}
+
+# ejercicio 3
+
+```
+
+**Ejercicio 4**
+
+Realice el mismo gráfico que en el punto anterior, pero además sume `nonwithe` como una tercera variable. Esta última se tiene que plotear mediante el color de los puntos.
+
+```{r ejercicio 4}
+
+# ejercicio 4
+
+
+```
+
+**Ejercicio 5**
+
+Ajuste un modelo simple utilizando `exper` como variable dependiente y `tenure` como variable explicativa. Muestre los resultados completos del modelo (`summary()`) y responda las siguientes preguntas.
+
++ ¿Es significativa la variable?
++ ¿Cómo se interpreta el coeficiente?
++ ¿Que valores componen un intervalo de confianza de 90%? 
+
+```{r ejercicio 5}
+
+# ejercicio 5
+
+
+```
+
+**Ejercicio 6**
+
+Analice los residuos del modelo. Primero compruebe que la media de los residuos es cero, luego realice un histograma y un plot contra los valores ajustados para ver si los residuos tienen estructura. 
+
+```{r ejercicio 6}
+
+# ejercicio 6
+
+
+```
+
+**Ejercicio 7**
+
+Cree un dataset nuevo que tenga: las variables `tenure` y `exper` (del dataset `wage1_vs`), pero además agregue como columna los residuos del modelo estimado. Compruebe que los residuos están bien calculados. Para eso, genere primero una nueva variable con los valores ajustados (multiplicando `tenure` por el coeficiente estimado y sumando el intercepto) y luego haga la resta de `exper` y esta variable. Debería obtener un valor igual al residuo.
+
+```{r ejercicio 7}
+
+# ejercicio 7
+
+
+```
+
+
+## Segunda parte
+
+Por lo que vimos hasta ahora, el mejor modelo para explicar el salario resultó el que, además de los años de educación, controlaba por los años de experiencia, los años en el empleo actual y el género. La fórmula del modelo era la siguiente: 
+`modmul3 = lm(data = wage1_vs, lwage ~ educ + exper + tenure + female)`.
+
+**Ejercicio 8**
+
+Analice los residuos de dicho modelo. Primero vea si tienen una distribución norma (histograma y boxplot), y luego vea si presentan estructura.
+
+```{r ejercicio 8}
+
+# ejercicio 8
+
+
+```
+
+**Ejercicio 9**
+
+Veamos si podemos mejorar el modelo. Primero, cree dos nuevas variables: el cuadrado de `exper` y el cuadrado de `tenure`. 
+
+```{r ejercicio 9}
+
+# ejercicio 9
+
+
+```
+
+**Ejercicio 10**
+
+Ahora haga múltiples pruebas. Ajuste un modelo sumando una de las variables, luego la otra, y luego ambas al mismo tiempo. Compare estos tres modelos con el modelo original ¿Cuál tiene mayor R-cuadrado ajustado?
+
+```{r ejercicio 10}
+
+# ejercicio 10
+
+
+```
+
+Nota: las formas polinómicas en el ajuste del modelo se pueden incluir sin la necesidad de calcular la variable, con `poly(variable, g)`, donde `g` es igual a 2 para el caso de la cuadrática.

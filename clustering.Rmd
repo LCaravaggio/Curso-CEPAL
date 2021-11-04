@@ -1,0 +1,518 @@
+---
+title: "Aplicaciones de clustering"
+date: "Septiembre de 2020"
+lang: es
+output:
+  html_notebook:
+    highlight: tango
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+    toc_depth: 2
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=T, fig.align="center"
+                      ,fig.width=10)
+
+```
+
+```{r libs}
+library(tidyverse)
+library(glue)
+
+library(GGally)
+library(ggridges)
+library(plotly)
+library(factoextra)
+library(amap)
+library(sf)
+```
+
+
+# Datos
+
+Leemos los datos del Banco Mundial con indicadores por países que se encuentran en `data/worldbank.csv`. En `data/world_bankmetadata.csv` podemos revisar los metadatos de cada indicador. `data/worldbank_sf.rds` contiene los datos necesarios para hacer mapas.
+
+
+```{r data}
+dat = read_csv("data/worldbank.csv")
+dat_sf = readRDS("data/worldbank_sf.rds")
+
+```
+
+# Análisis exploratorio I
+
+Echamos un vistazo a los datos.
+
+```{r}
+dim(dat)
+
+```
+
+```{r}
+names(dat)
+
+```
+
+```{r}
+head(dat)
+
+```
+
+Descartamos variables irrelevantes.
+
+```{r}
+dat = dat %>% select(-c(date)) # descartamos el año
+
+```
+
+Vemos los países con los valores más bajos y más altos por variable
+
+```{r}
+# variables de "ID" (y que no sirven para agrupar)
+id_cols = c("iso3c", "country", "region", "income_level")
+dat_tmp = dat %>% 
+  # formato long 
+  pivot_longer(-id_cols, names_to="variable", values_to="value") %>% 
+  arrange(variable) %>% 
+  select(-iso3c, -region, -income_level) %>% 
+  # valores ordenados por variable
+  group_by(variable) %>% 
+  arrange(-value) 
+# data.frame con top3 y bottom3 por variable
+rdo = bind_rows(
+  dat_tmp %>% top_n(3, value) %>% ungroup()
+  ,dat_tmp %>% top_n(-3, value) %>% ungroup()
+) %>% 
+  arrange(variable, value)
+
+# print: un dataframe por cada variable
+print( split(rdo, rdo$variable) )
+
+### alternativa:
+# for (var_ in names(dat)) {
+#   tmp = dat %>% 
+#     arrange(!!sym(var_)) %>% 
+#     select(country, var_)
+#   top = tmp %>% head(3)
+#   bottom = tmp %>% tail(3)
+#   print(var_)
+#   print(bind_rows(top, bottom))
+# }
+###
+
+```
+
+Graficamos la distribución de cada variable por separado:
+
+```{r}
+# formato long
+gdat = dat %>%
+  pivot_longer(-id_cols, names_to="variable", values_to="value")
+# plot de densidad por variable
+plt = 
+  ggplot(gdat) +
+  geom_density(aes(x=value), fill="red", alpha=0.2) +
+  facet_wrap(~variable, scales = "free") +
+  theme_minimal() +
+  NULL
+
+print(plt)
+
+```
+
+Analizamos las correlaciones entre las variables:
+
+```{r corr}
+# dataframe con variables numericas
+dat_num = dat %>% select_if(is.numeric)
+# matriz de correlaciones como plot
+plt = GGally::ggcorr(dat_num, label=T, method=c("all.obs","spearman"))
+
+print( plt )
+
+### opcion interesante para graficar:
+# GGally::ggpairs()
+
+```
+
+# Preprocesamiento
+
+Creamos un data.frame con las variables que usaremos para agrupar países.
+
+Vamos a **normalizar** estas variables para que estén en **escalas comparables**. Este paso se conoce como _scaling_. Las normalizaciones más comunes son:
+
+- estandarización **media-desvío**
+ 
+ $$ \frac{x - avg(x)}{sd(x)} $$
+
+Todas las variables quedan con media 0 y desvío 1, y las unidades representan desvíos con respecto a la media. Las variables con más valores extremos tendrán un rango más alto que el resto.
+
+- **min-max**
+
+$$ \frac{x - min(x)}{max(x) - min(x)} $$
+Todas las variables quedan expresadas en el rango 0-1. Las medias y los desvíos de las variables no son iguales, a diferencia de la estandarización convencional.
+
+- estandarización **robusta** 
+
+$$ \frac{x - median(x)}{IQR(x)} $$
+
+En lugar de usar la media y la varianza, se usa la mediana y el rango intercuartílico. Este tipo de normalización es robusta a valores extremos por variable.
+
+```{r normaliza}
+# funciones (udf) para normalizar
+minmax = function(x) (x - min(x)) / (max(x) - min(x))
+rob_scale = function(x) (x - median(x)) / IQR(x)
+# data numerica normalizada
+dat_c = dat %>%
+  select_if(is.numeric) %>% 
+  # scale(center=T, scale=T) %>% # estandarizacion media-desvio
+  mutate_all(rob_scale) %>% # normalizacion
+  as.data.frame()
+
+```
+
+# Análisis exploratorio II
+
+Analizamos los _perfiles_ de los países en términos de las variables. Este gráfico nos puede servir para definir la noción de **similitud/disimilitud** apropiada para nuestro problema.
+
+```{r parallel}
+# formato long con datos normalizados
+gdat = dat %>%
+  mutate_if(is.numeric, rob_scale) %>% 
+  pivot_longer(
+    cols=-id_cols, names_to="variable", values_to="value"
+  )
+# plot de coordenadas paralelas
+plt = ggplot(gdat, aes(x=variable, y=value, group=country)) +
+  geom_line(alpha=0.3) +
+  geom_line(data=filter(gdat, country=="Argentina")
+            , color="red", alpha=0.3) +
+  theme_minimal()
+
+# plot interactivo
+ggplotly(plt, width=860, height=500)
+
+```
+
+```{r}
+# lo mismo pero sin outliers...
+gdat_sin_outliers = gdat %>% 
+  filter(!country %in% c("India","China","Singapore"))
+plt_sin_outliers = 
+  ggplot(gdat_sin_outliers, aes(x=variable, y=value, group=country)) +
+  geom_line(alpha=0.3) +
+  geom_line(data=filter(gdat, country=="Argentina")
+            , color="red", alpha=0.3) +
+  theme_minimal()
+
+ggplotly(plt_sin_outliers, width=860, height=500)
+
+### alternativa:
+# GGally::ggparcoord()
+###
+
+```
+
+
+Por ejemplo, si usamos la disimilitud de **correlación** como métrica, estaremos agrupando países con el mismo **perfil** en los indicadores, sin importar el nivel. En cambio, para las distancias **euclidiana** o **Manhattan**, lo importante es la diferencia en los **niveles**.
+
+Recordemos además que la distancia euclidiana computa **desvíos cuadráticos**, mientras que Manhattan usa **desvíos absolutos**. Por lo tanto, la distancia euclidiana penaliza grandes diferencias relativamente más que la distancia Manhattan.
+
+También podemos hacer un análisis más detallado de las distancia entre todos los pares de países.
+
+```{r dist}
+# matriz de distancias
+dist_obj = dist(dat_c, method="manhattan")
+dist_matrix = as.matrix(dist_obj)
+# nombres de filas y columnas
+dimnames(dist_matrix) = list(country1=dat$country, country2=dat$country)
+# de matriz a data.frame long con un atajo
+dist_df = as.data.frame(as.table(dist_matrix)) %>%
+  rename(dist = Freq) 
+
+```
+
+Veamos los países más cercanos y lejanos de Argentina.
+
+```{r}
+tmp = dist_df %>% 
+  filter(country1 != country2) %>% 
+  filter(country1 == "Argentina") %>% 
+  arrange(dist)
+
+head(tmp)
+
+```
+
+
+```{r}
+tail(tmp)
+
+```
+
+Con estos datos podemos verificar visualmente si existen algunos países claramente atípicos (muy distantes del resto).
+
+```{r}
+# distancia mediana de cada pais vs el resto
+gdat = dist_df %>% 
+  group_by(country1) %>%
+  summarise(median_dist = median(dist))
+# plot de las medianas ordenadas
+plt = 
+  ggplot(gdat, aes(x=reorder(country1, median_dist), y=median_dist)) +
+  geom_point() +
+  theme_minimal() +
+  theme(axis.text.x=element_blank())
+
+ggplotly(plt, width=860, height=450) 
+
+### con un boxplot por pais:
+# ggplot(dist_df, aes(x=reorder(country1, dist, mean), y=dist)) + 
+#   geom_boxplot() +
+#   theme_minimal() +
+#   theme(axis.text.x=element_text(angle=-90))
+###
+
+```
+
+Efectivamente algunos países son potencialmente outliers; es decir, son muy distintos del resto, tienen pocos "vecinos" (países parecidos).
+
+# Test de Hopkins
+
+Evaluamos si existe tendencia al agrupamiento usando el **test de Hopkins**.
+
+```{r hopkins}
+hopkins = factoextra::get_clust_tendency(dat_c, n=100, seed=321)
+
+cat("Hopkins =", hopkins$hopkins_stat)
+
+```
+
+Según la documentación de la función `get_clust_tendency()`, un Hopkins más alto indica mayor tendencia al clustering.
+En este caso, el valor del estadístico es significativamente superior a 0.5, entonces podemos concluir que los países no están distribuidos uniformemente en el espacio de las variables. Es decir, presentan una **tendencia a agruparse**.
+
+# Clustering jerárquico
+
+Vamos a ejecutar un algoritmo de **clustering aglomerativo** usando _average linkage_.
+
+```{r}
+rownames(dat_c) = dat$country
+# clustering jerarquico sin "cortar" el dendrograma
+hc = amap::hcluster(dat_c, method="manhattan", link="average")
+
+```
+
+## Dendrograma
+
+Visualizamos los resultados con un dendrograma horizontal.  
+
+```{r dendrograma, fig.height=18}
+# identificamos algunos paises para colorearlos
+grupos = ifelse(dat$country[hc$order] %in% "Argentina", 2, 1)
+colores = c("black", "red")
+# plot dendrograma
+fviz_dend(hc, horiz=T, k_colors=colores, label_cols=grupos)
+
+```
+
+También podemos visualizar la estructura del dendrograma con un **mapa de calor**. Cada celda indica la distancia entre pares de países. Los países se ordenan según el dendrograma generado por el clustering jerárquico.
+
+```{r, fig.width=7, fig.height=4}
+# matriz de distancias long con paises como factores
+gdat = dist_df %>% 
+  mutate(
+    country1 = factor(country1, levels=dat$country[hc$order])
+    ,country2 = factor(country2, levels=dat$country[hc$order])
+  )
+
+# funcion para heatmap (geom_tile)
+mapacalor = function(long_df) {
+  ggplot(long_df, aes(x=country1, y=country2, z=dist)) +
+    geom_tile(aes(fill=dist)) +
+    theme(
+      axis.title.x=element_blank()
+      ,axis.text.x=element_blank()
+      ,axis.title.y=element_blank()
+      ,axis.text.y=element_blank()
+    ) +
+    scale_fill_viridis_c()
+} 
+
+print( mapacalor(gdat) ) 
+
+```
+
+```{r, fig.width=7, fig.height=4}
+# lo mismo pero sin outliers
+outlier_countries = c("India","China","Singapore")
+gdat_sin_outliers = gdat %>% 
+  filter(
+    !(country1 %in% outlier_countries | country2 %in% outlier_countries)
+  )
+
+print( mapacalor(gdat_sin_outliers) ) 
+
+```
+
+
+
+Analizamos cuál puede ser una cantidad de clusters de países razonable según varios criterios.
+
+## Punto de quiebre
+
+Un criterio posible es elegir el K a partir del cual se reduce significativamente la tasa de caída en la **variabilidad intracluster**.
+
+```{r }
+fviz_nbclust(dat_c, FUNcluster=hcut, method="wss", k.max=20
+             ,diss=dist(dat_c, method="manhattan"), hc_method="average") 
+
+```
+
+## Gap
+
+Una forma de formalizar el criterio de "punto de quiebre" es el **Gap statistic**. Éste calcula la diferencia logarítmica entre la variabilidad intra-cluster del dataset real y datasets simulados con distribución uniforme.  
+
+```{r }
+set.seed(321)
+fviz_nbclust(dat_c, FUNcluster=hcut, method="gap_stat", k.max=20
+             ,nstart=50, nboot=100
+             ,diss=dist(dat_c, method="manhattan"), hc_method="average")
+
+```
+
+El criterio indica que se debe elegir el mínimo K a partir del cual la "tasa de creciemiento" del estadístico se reduce. Sin embargo, en presencia de outliers y subclusters con distintos grados de separación, el comportamiento es no monótono, por lo cual es necesario mirar toda la curva. Para más detalles ver [el paper original](https://statweb.stanford.edu/~gwalther/gap).
+
+## Silhouette
+
+Otra posibilidad es mirar el **silhouette** promedio de todas las observaciones. El silhouette de cada objeto compara la cercanía con los objetos del proprio cluster (**cohesión**) con la distancia a objetos de otros clusters (**separación**). El estadístico varía entre 1 y -1. 
+
+```{r }
+fviz_nbclust(dat_c, FUNcluster=hcut, method="silhouette", k.max=20
+             ,diss=dist(dat_c, method="manhattan"), hc_method="average") 
+```
+
+
+# Análisis de resultados
+
+Supongamos que definimos $K=15$, sabiendo que muchos de los clusters probablemente tengan tamaño=1 ("outliers").
+
+```{r}
+rownames(dat_c) = dat$country
+# clustering jerarquico "cortado" en 15
+hc = hcut(dat_c, k=15, hc_method="average", hc_metric="manhattan", stand=F)
+
+```
+
+Veamos el gráfico de silhouette para $K=15$:
+
+```{r, fig.height=12}
+plt = 
+  fviz_silhouette(hc, label=T, print.summary=F) +
+  theme(axis.text.x=element_text(angle=-90, size=4))
+
+print( plt )
+
+```
+
+Graficamos nuevamente un dendrograma horizontal pero coloreando por cluster.
+
+```{r fig.height=18}
+fviz_dend(hc, horiz=T, k=15, repel=T) 
+
+```
+
+Otra forma de presentar el dendrograma es un árbol filogenético para facilitar la visualización. La disposición de cada objeto en el plano va a estar definida por algoritmos del campo de la teoría de grafos y comunidades.
+
+```{r, fig.height=8}
+fviz_dend(hc, type="phylogenic", k=15, repel=T) 
+
+```
+
+Añadimos a los datasets la pertenencia de cada objeto a cada grupo. También generamos una variable indicadora de "outlier".
+
+```{r}
+# data con variables originales
+dat_hc = dat %>%
+  mutate(cluster = factor(hc$cluster))
+
+# indicamos "outliers" 
+outlier_countries = dat_hc %>% 
+  group_by(cluster) %>% 
+  filter(n() == 1) %>% 
+  pull(country)
+# indicador de outlier
+dat_hc = dat_hc %>% 
+  mutate(outlier = ifelse(country %in% outlier_countries, 1, 0))
+
+# variables normalizadas
+dat_c_hc = dat_c %>%
+  bind_cols(dat %>% select(id_cols)) %>% 
+  mutate(
+    cluster = factor(hc$cluster)
+    ,outlier = ifelse(country %in% outlier_countries, 1, 0)
+  )
+
+```
+
+Comparamos visualmente las distribuciones de las variables entre clusters.
+
+```{r, fig.height=8}
+# long data.frame con variables normalizadas
+gdat = dat_c_hc %>% 
+  filter(outlier == 0) %>% 
+  pivot_longer(-c(id_cols, cluster), names_to="variable", values_to="value")
+# densidades por variable
+plt_density = 
+  ggplot(gdat, aes(x=value, y=variable, color=cluster, point_color=cluster
+                 , fill=cluster)) +
+  ggridges::geom_density_ridges(
+    alpha=0.5, scale=1
+    ,jittered_points=T, position=position_points_jitter(height=0)
+    ,point_shape="|", point_size=2
+  ) +
+  theme_minimal() +
+  NULL
+
+print(plt_density)
+
+```
+
+
+```{r}
+# boxplots por cluster
+plt_boxplot =
+  ggplot(gdat, aes(x=variable, y=value, color=cluster)) +
+  facet_wrap(~cluster, ncol=2, scales="free_y") +
+  geom_boxplot() +
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=-90)) +
+  NULL
+
+print(plt_boxplot)
+
+```
+
+Por último, representamos los clusters en un mapa:
+
+```{r mapa}
+# datos con info geografica
+gdat = dat_sf %>% 
+  left_join(dat_hc, by="iso3c") %>% 
+  filter(iso3c != "ATA") %>% # sin antartica
+  mutate(
+    cluster = ifelse(outlier == 1, "outlier", cluster)
+  )
+# mapa
+plt = 
+  ggplot(gdat, aes(fill=cluster, label=country)) +
+  geom_sf() +
+  theme_minimal() +
+  theme(legend.position="bottom") +
+  NULL
+
+ggplotly( plt, width=800 )
+
+```
+

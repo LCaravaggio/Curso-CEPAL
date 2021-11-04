@@ -1,0 +1,188 @@
+---
+title: "Trabajando con datos de escuelas en CABA"
+output: learnr::tutorial
+runtime: shiny_prerendered
+description: "Ejercicios de tidyverse"
+---
+
+
+```{r setup, include=FALSE}
+library(learnr)
+library(tidyverse)
+library(sf)
+```
+
+Vamos a trabajar con la base de datos de escuelas de CABA para ver la distribución según si pertenecen al sector público o privado. Pero antes, abriremos la base de polígonos de barrios de CABA para estar seguros que estamos en el contexto adecuado
+
+```{r}
+
+
+barrios <- st_read("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/barrios/barrios.geojson")
+
+escuelas <- st_read("http://cdn.buenosaires.gob.ar/datosabiertos/datasets/establecimientos-educativos/establecimientos-educativos.geojson")
+
+
+```
+
+```{r crs, echo=FALSE}
+question("¿En qué sistema de referencias cartesiano está el archivo de escuelas según la descripción del archivo?",
+  answer("WGS 84 - 4326", correct = TRUE),
+  answer("Mercator - 3857"),
+  answer("EPSG - 27561")
+)
+```
+
+
+```{r barrios}
+
+
+ggplot() +
+  geom_sf(data = barrios) +
+  theme_void()
+
+
+```
+
+
+¿Cómo puedo hacer para que el mapa en vez de barrios me muestre las escuelas?
+
+```{r mapas, exercise=TRUE}
+
+ggplot() +
+  geom_sf(data = barrios) +
+  theme_void()
+
+
+```
+
+
+
+```{r mapas-solution}
+
+ggplot() +
+  geom_sf(data = escuelas) +
+  theme_void()
+
+```
+
+Hacer que el mapa muestre tanto los barrios como las escuelas y que los puntos se encuentren pintados de acuerdo a si pertenecen al sector público o privado (columna SECTOR en la base de datos: 1 es sector público y 2 es sector privado)
+
+```{r escuelas, exercise=TRUE}
+
+## Recuerden chequear que se encuentren todas las variables explicitadas
+
+ggplot() +
+  geom_sf(data = barrios, fill = NA) +
+  geom_sf(data = escuelas, aes(color = as.factor()), size = 1) +
+  theme_void()
+
+
+```
+
+
+
+
+```{r escuelas-solution}
+
+ggplot() +
+  geom_sf(data = barrios, fill = NA) +
+  geom_sf(data = escuelas, aes(color = as.factor(SECTOR)), size = 1) +
+  theme_void()
+
+
+```
+
+
+
+
+```{r Sector, echo=FALSE}
+question("Si quisiera hacer un mapa de cloropleta, ¿cuál es el argumento que debo utilizar dentro del aes()?",
+  answer("color ="),
+  answer("alpha = "),
+  answer("fill = ", correct = TRUE)
+)
+```
+
+
+¿Cómo puedo saber cuántas escuelas de cada sector (público o privado) hay en CABA?
+
+```{r tipo, exercise=TRUE}
+
+
+##recuerden de clases pasadas la funcion para contar la cantidad de casos
+
+
+escuelas %>% 
+  group_by(SECTOR) %>% 
+  summarise(total_escuelas_sector = )
+
+
+```
+
+
+
+```{r tipo-solution}
+
+escuelas %>% 
+  group_by(SECTOR) %>% 
+  summarise(total_escuelas_sector = n())
+
+
+```
+
+
+
+```{r tipo_escuelas, echo=FALSE}
+
+
+question("¿En la Ciudad de Buenos Aires, hay más escuelas privadas (valor 2 de SECTOR) o públicas (valor 1 de SECTOR)?",
+  answer("Privadas"),
+  answer("Públicas", correct = TRUE)
+)
+
+
+```
+
+
+
+```{r separador, echo=FALSE}
+question("En ggplot2 o la gramatica de visualización lo que separa cada paso es",
+  answer(" %>% "),
+  answer(" signo de adición: + ", correct = TRUE),
+  answer(" & ")
+)
+```
+
+
+
+```{r publicas, echo=FALSE}
+question("¿Cuál es el verbo que me permitiría trabajar sólo con las escuelas públicas",
+  answer("filter()", correct = TRUE),
+  answer("select()"),
+  answer("mutate()"),
+  answer("arrange()")
+)
+```
+
+
+
+
+
+¿Qué modificaciones se podrían hacer a este gráfico para que tenga un formato más atractivo?
+
+```{r}
+
+ggplot() +
+  geom_bar(data = escuelas, aes(SECTOR))
+
+
+```
+
+
+
+
+
+
+
+
+

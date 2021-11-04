@@ -1,0 +1,142 @@
+--- 
+title: "Extras clase 2"
+author: "Mariano Aizpurua"
+date: "19/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r cargo bibliotecas, warning= FALSE, message=FALSE}
+
+library(tidyverse)
+library(kableExtra)
+
+```
+
+
+# Carga de bases
+
+## Definir delimitador y encoding
+
+Recordemos que los archivos tipo .csv contienen texto separado por comas u otro delimitador (salto de línea, ";"). Utilizando la función **read_delim()** podemos definir cual es ese delimitador para que la carga de datos sea correcta. Además podemos definir cual es el sistema de codificación de caracateres con el que vamos a cargar la base, pudiendo elegir entre una larga lista que incluye UTF-8, ASCII, Latin-1. De esta manera se cargarán adecuadamente caracteres especiales con tildes, diéresis, cedilla, ñ, etc.
+
+
+```{r warning= FALSE, message=FALSE}
+personas_cyt_2018 <- read_delim("personas_2018.csv",
+                              delim = ';',
+                              locale = locale(encoding = "UTF-8"))
+
+# col_types = list(col_factor(),
+#                  col_character(),
+#                  col_date(format = "%Y-%m-%d"),
+#                  col_time(),
+#                  col_integer())
+# 
+# col_types = cols(id_sexo = col_character())
+```
+
+
+
+
+
+# Pivot longer
+
+Frecuentemente encontrarán que la información no está ordenada en formato **Tidy**. Para que eso suceda deben cumplirse las siguientes condiciones:
+
+* Cada variable debe tener su propia columna.
+
+* Cada observación debe tener su propia fila. 
+
+* Cada valor debe tener su propia celda.
+
+
+Para transformar estas estructuras, presentamos las valiosas funciones que nos permiten **Pivotear**.
+
+### Cargo tablas
+
+```{r warning= FALSE, message=FALSE}
+personas_2018 <- read_delim("personas_2018.csv",
+                            delim = ";")
+
+ref_sexo <- read_delim("ref_sexo.csv",
+                      delim = ";")
+
+
+ref_disciplina <- read_delim("ref_disciplina.csv",
+                            delim = ";")
+
+grupo_edad_genero <- read_delim("grupoedad_genero.csv",
+                                delim = ",")
+```
+
+### Distribución de frecuencia de personas según edad y género en una población:
+```{r}
+kable(grupo_edad_genero) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+```
+
+Identifiquemos las variables en la tabla: 
+
++ género
+
++ rango de edad
+
++ cantidad de personas
+
+
+Sólo una de esas variables es una columna, los valores de rango etario está en el nombre de la columna y se organizan horizontalmente, y los valores de recuento de personas en celdas de cada una de estas columnas. 
+
+Para pivotar hacia una tabla larga, debemos identificar las columnas seleccionadas, y los nombres de las nuevas variables que contendrán sus valores.
+
+
+![](pivot_longer.jpg "pivot longer")
+
+
+
+```{r pivot longer}
+tabla_longer <- grupo_edad_genero %>% 
+  pivot_longer(cols = 2:11, names_to = "rango_edad", values_to = "cantidad_personas")
+
+
+kable(tabla_longer) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+
+# tabla_longer <- grupo_edad_genero %>%
+#   pivot_longer(-genero, names_to = "rango_edad", values_to = "cantidad_personas")
+
+```
+
+
+
+# Pivot wider
+
+Esta función realiza la operación inversa a pivot longer para transformar a tablas mas "anchas", desplegando horizontalmente en los nombres de nuevas variables los valores de la variable a expandir, y asignando valores desde otra variable seleccionada.
+Usaremos como ejemplo la base de personas de Ciencia y Tecnología utilizada en el ejercicio de hoy:
+
+
+```{r}
+ personas_sexo_disciplina<- personas_2018 %>% 
+  select(persona_id, sexo_id, disciplina_id=disciplina_maximo_grado_academico_id) %>% 
+  left_join(ref_sexo) %>% 
+  left_join(ref_disciplina) %>% 
+  count(sexo_descripcion, gran_area_descripcion)
+
+kable(personas_sexo_disciplina) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+
+# group_by(sexo_descripcion, gran_area_descripcion) %>% 
+#   summarise(cantidad_personas=n())
+
+
+tabla_wide <- personas_sexo_disciplina %>% 
+  pivot_wider(names_from = gran_area_descripcion, values_from = n)
+
+kable(tabla_wide) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12)
+```
+
+
+

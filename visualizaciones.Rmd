@@ -1,0 +1,538 @@
+---
+title: "Taller 3: Visualización de datos"
+date: "8/24/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Visualización de datos
+
+```{r bibliotecas, results='hide', eval=FALSE}
+
+install.packages("sf")
+install.packages("kableExtra")
+install.packages("paletteer")
+install.packages("learnr")
+
+```
+
+**¿Qué es la visualización de datos y por qué es importante?**
+
+La visualización de datos es la representación de datos o información en un gráfico, cuadro u otro formato visual. Comunica relaciones de los datos con imágenes. Los gráficos suelen permitir que las tendencias y los patrones se vean más fácilmente que mirar a través de miles de filas en una hoja de cálculo. Dado que el propósito del análisis de datos es obtener información, los datos son mucho más valiosos cuando se visualizan. Incluso si un analista de datos puede extraer conocimientos de los datos sin visualización, será más difícil comunicar el significado sin ellos: los cuadros y gráficos facilitan la comunicación de los resultados de los datos, incluso si puede identificar los patrones sin ellos (https://www.import.io/post/what-is-data-visualization)
+
+
+
+**Las tablas**, con sus filas y columnas de datos, interactúan principalmente con nuestro sistema verbal, las leemos. Las tablas son muy útiles cuando se  tiene una audiencia diversa, donde cada uno quiere mirar su propia dimensión: un cuadro puede ofrecer gran cantidad de información. Las tablas también son útiles cuando tiene muchas unidades de medida diferentes, que pueden ser difíciles de lograr de una manera fácil de leer en un gráfico.
+
+**Los gráficos**, por otro lado, interactúan con nuestro sistema visual. Es un flujo de información de gran ancho de banda desde lo que ven nuestros ojos hasta la comprensión en nuestro cerebro, que puede ser extremadamente poderoso cuando se encuentra bien hecho. Los gráficos pueden presentar una inmensa cantidad de datos de forma rápida y fácil de consumir; son particularmente útiles cuando hay un punto que resaltar en la forma de los datos, o para mostrar cómo las diferentes cosas (variables) se relacionan entre sí.
+
+**Los mapas** nos permiten sumarle el dónde o contexto a los gráficos y de mostrar patrones que tienen que ver con la cercanía o la locación que no son visibles en gráficos comunes ni en tablas. Además, son capaces de mostrar fenoménos graduales, nucleos que trascienden las fronteras conceptuales y transiciones.
+
+(http://www.storytellingwithdata.com/blog/2011/11/visual-battle-table-vs-graph)
+
+
+![William Playfair fue uno de los padres de la mayoría de los gráficos que conocemos: lineas, barras, tortas, entre otros](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/1786_Playfair_-_Exports_and_Imports_of_Scotland_to_and_from_different_parts_for_one_Year_from_Christmas_1780_to_Christmas_1781.jpg/500px-1786_Playfair_-_Exports_and_Imports_of_Scotland_to_and_from_different_parts_for_one_Year_from_Christmas_1780_to_Christmas_1781.jpg)
+<br>
+
+![Otra de las fundadoras de la visualización fue Florencia Nightingale, en este caso con un gráfico sobre mortalidad durante 1854](https://www.uh.edu/engines/coxcombchart.jpg)
+<br>
+
+
+Y un clásico que dio inicio a la epidemiología
+
+![John Snow y su famoso mapa de colera](https://blog.datawrapper.de/img/thumb-190418_w_johnsnow.png)
+
+
+
+(https://medium.com/@Infogram/key-figures-in-the-history-of-data-visualization-30486681844c)
+
+**¿Para qué fases es importante la visualización de datos en el flujo de trabajo de la ciencia de datos?**
+
+* Análisis de datos exploratorios (EDA)
+* Detección de valores atípicos
+* Comunicación de resultados
+
+(https://www.r-bloggers.com/why-data-visualization-is-important/#:~:text=Data%20visualization%20is%20not%20only,way%20using%20the%20ggplot2%20package)
+
+**¿Cuáles son los pasos para una visualización efectiva?**
+
+1. Reconocer e identificar qué tipos de variables quiero graficar
+2. Seleccionar los tipos de gráficos más apropiados para el contexto en el que se desea sumarizar la información de manera visual 
+3. Elegir la biblioteca y la función más apropiada para llevar adelante el código del ploteo
+4. Evaluar si cumple con los objetivos de la tarea de mostrar gráficamente información (y transformar los datos o el tipo de gráficos)
+5. Una vez conforme con el planteo general del gráfico, ajustar parámetros de formato 
+6. Elegir la plataforma o medio más conveniente para mirar o mostrar los resultados
+
+
+***Bibliotecas más comunes para la visualización de gráficos***
+
+- ggplot2 en tidyverse
+- highcharter
+- network3d
+- sf
+- ggmap
+- leaflet
+
+
+** Tipos de gráficos más comunes **
+
+https://rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf
+
+Gráficos de:
+* Línea
+* Barras
+* Histogramas
+* Boxplots
+* Matriz de dispersión
+* Mapas
+* Grafos
+* Violín / Waffle / Donut
+
+
+
+```{r librerias, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(kableExtra)
+library(paletteer)
+library(sf)
+
+```
+
+Vamos a explorar la distribución de Puntos WIFI por jurisdicción con la base extraída de Datos Abiertos Argentina (https://datos.gob.ar/dataset/jgm-puntos-wifi-pais-digital/archivo/jgm_13.1)
+
+```{r bases}
+
+wifi <- read.csv("conectiwidad-wifi.csv", encoding = "UTF-8") %>% filter(longitud < 0)
+
+provincias <- read.csv("pob_provincia.csv", encoding = "UTF-8", sep = ";") %>% select(provincia = X.U.FEFF.Provincia, poblacion = "Población")
+
+
+```
+
+
+Como solemos hacer, vamos a explorar la base de datos de Puntos Wifi
+
+
+```{r exploracion}
+
+glimpse(wifi)
+names(wifi)
+
+```
+
+```{r transformacion por provincia}
+
+
+wifi_prov <- wifi %>% 
+  group_by(provincia) %>% 
+  summarise(total_puntos = n())
+
+
+```
+Vamos a empezar por ver los resultados con tablas
+
+
+```{r visualizacion en tablas}
+
+
+wifi_prov %>% 
+  arrange(desc(total_puntos)) %>% 
+  head(n = 5)
+
+
+kable(wifi_prov) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"), font_size = 12) %>%
+  footnote(general = "Fuente: datos.gob.ar")
+
+
+
+
+```
+Las tablas agrupadas nos ayudan a ver de manera más sintética la información original, brindan información completa y es sencillo identificar cuáles son los valores con mayores o menores registros. Sin embargo, las visualizaciones gráficos también suman algunas ventajas. Vamos a trabajar con ggplot2 e introducir la gramática de visualización que utiliza
+
+Para comenzar un gráfico con ggplot2 se utiliza la función ggplot(), que crea un sistema de coordenadas al que podemos agregar capas. El primer argumento a completar es la fuente de datos que usaremos para graficar.
+Cada capa se va construyendo de a una a la vez, unidas por el signo **+** escrito al final de la línea.
+
+La función geom_bar() agrega una capa de puntos al gráfico, que crea un plot de barras. ggplot2 incluye muchas funciones geom, con diferentes tipos de gráficos.
+
+A través del mapeo en aesthetics se asignan las variables del set de datos a propiedades visuales. Con los argumentos x e y dentro de aes() se especifican qué variables asignar a estos ejes (posición). 
+
+
+```{r grafico basico}
+
+
+## Grafico basico
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = provincia, weight = total_puntos))
+
+
+
+```
+
+
+Encontramos dificultades para la lectura de las provincias en el eje x, probemos invirtiendolos:
+
+```{r grafico invertido y colores}
+## Para mejorar la visualizacion de categorias
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = provincia, weight = total_puntos)) +
+  coord_flip()
+
+
+## Ordenando los ejes en el grafico
+
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), weight = total_puntos)) +
+  coord_flip()
+
+```
+
+
+ggplot también nos permite ajustar las series, referencias, fuentes, títulos y subtítulos en nuestros gráficos.
+
+```{r leyendas}
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), weight = total_puntos)) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi")
+```
+
+
+
+```{r fondo blanco y temas}
+## Volviendolo un poco mas lindo
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), weight = total_puntos)) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi") +
+  theme_classic()
+
+
+```
+
+Además del mapeo de las variables en posiciones x e y, podemos mapear una tercer variable con un parámetro estético: color, tamaño o forma. Para mapear una estética a una variable, debes asociar el nombre de la estética al de la variable dentro de aes(), y se asignará automáticamente un nivel único de la estética (en este ejemplo, un color) a cada valor único de la variable. Se incluirá una leyenda que explica qué niveles corresponden a qué valores.
+
+Los atributos posibles son:
+* color - color=
+* relleno - fill=
+* forma - shape= 
+* tamaño - size=
+* transparencia - alpha=
+
+
+Si queremos que el parametro estético se aplique a todos los valores, y que no dependa del nivel de una variable y sea fijo, debemos escribirlo fuera del mapeo de aes()
+
+R identifica una amplia gama de colores por su denominación. Para conocer mas pueden explorar en : http://www.stat.columbia.edu/~tzheng/files/Rcolor.pdf
+
+
+
+```{r color}
+## Color unico
+
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), weight = total_puntos), fill = "seagreen1", color = "royalblue4", alpha = 0.6) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi") +
+  theme_classic()
+
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), weight = total_puntos, fill = factor(provincia)), color = "royalblue4", alpha = 0.6) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi") +
+  theme_classic()
+
+
+
+```
+
+
+R posee una gran infinidad de paletas. En este caso usamos la biblioteca paletteer que condensa muchas de ellas.
+
+https://github.com/EmilHvitfeldt/paletteer
+
+
+```{r paletas de colores}
+
+ggplot() +
+  geom_bar(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), weight = total_puntos, fill = total_puntos)) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi") +
+  theme_classic() +
+     scale_fill_paletteer_c("scico::hawaii", direction = -1, guide = TRUE)
+
+
+## geom_col hace lo mismo que geom_bar
+
+ggplot() +
+  geom_col(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), y = total_puntos, fill = total_puntos)) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi") +
+  theme_classic() +
+     scale_fill_paletteer_c("scico::hawaii", direction = -1, guide = FALSE) +
+  geom_text(data = wifi_prov, aes(x = fct_reorder(as.factor(provincia), total_puntos), y = total_puntos, label = total_puntos), size = 4, nudge_y = 5)
+
+
+```
+
+
+Ahora, siempre que manejamos datos territoriales es importante considerar las dimensiones de la estandarización, ya sea por si resulta pertinente dividir por el área o por la cantidad de población. En este caso nos resultó relevante ver cuántos puntos wifi hay por habitante en cada provincia. 
+
+
+```{r estandarizacion}
+
+
+wifi_prov_p <- wifi_prov %>% 
+  left_join(provincias, by = "provincia") %>% 
+  mutate(puntos_pob = round(poblacion / total_puntos))
+
+
+
+options(scipen = "99999")
+
+```
+
+Luego de la transformación de datos, podemos verlo en un gráfico como el que hicimos antes a ver si hay algún cambio en el orden. 
+
+```{r barras colores}
+
+library(showtext)
+
+font_add_google("Roboto", "Roboto")
+
+
+ggplot() +
+  geom_col(data = wifi_prov_p, aes(x = fct_reorder(as.factor(provincia), puntos_pob), y = puntos_pob, fill = puntos_pob)) +
+  coord_flip() +
+  labs(title = "Puntos Wifi por provincia",
+       caption = "Datos Abiertos Argentina",
+       x = "Provincia",
+       y = "Puntos Wifi") +
+  theme_classic() +
+     scale_fill_paletteer_c("scico::hawaii", direction = -1, guide = FALSE) +
+  geom_text(data = wifi_prov_p, aes(x = fct_reorder(as.factor(provincia), puntos_pob), y = puntos_pob, label = puntos_pob), position = position_stack(vjust = 0.5), color = "white", fontface = "bold") +
+   theme(text = element_text(size = 14, family = "Roboto"), axis.text.x = element_text(size = 10)) + 
+    scale_y_continuous(expand = c(0,0)) 
+
+
+
+
+```
+
+
+
+## Información geográfica
+
+La información geográfica forma parte de nuestro cotidiano. Los sistemas de posicionamiento global para navegación (GPS), Google Maps y el uso extendido en smartphones son claros ejemplos del consumo masivo de mapas y otros productos de información geográfica. La caída en los costos de producción y adquisición de datos geoespaciales hicieron que dejen de ser propiedad de especialistas. Hay gran disponibilidad de datasets con datos geográficos de libre acceso, y múltiples herramientas para su procesamiento de manera simple.   
+
+Resulta relevante conocer la distribución territorial de los fenómenos sociales, entender dónde ocurren. El mapa es una herramienta valiosa como representación, ya que funciona como determinante de los fenómenos sociales, y puede mostrar patrones, transiciones o gradientes que no se ven en un grafico común. Además es fácil superponer distintas capas lo cual vuelve aún más completo un análisis si se mantiene la parsimonia. 
+
+
+### Datos georeferenciados
+
+Estos datos representan ubicaciones exactas en la tierra, pero nos ofrecen algunos retos: la superficie terrestre es achatada en los polos y abultada en el ecuador, y tiene 3 dimensiones. Esto dificulta comparar posiciones y medir distancias. Además, tenemos el desafio de mostrar en una pantalla o papel con 2 dimensiones su forma elipsoide y tridimensional. 
+Para resolverlo contamos con  **sistemas de coordenadas de referencia (crs)** y **proyecciones cartográficas**:
+
+__* CRS:__ son sistemas numéricos que definien posiciones en la superficie. El mas conocido utiliza Latitud/longitud para definir posición en los ejes norte-sur y este-oeste.
+
+* Las __proyecciones cartográficas__ son instrucciones para traducir a un plano la disposición de puntos ubicados en la esfera terrestre. En todas las proyecciones hay información que se pierde o distorsiona: la forma, la superficie, la distancia o la dirección de los rasgos geográficos. Existen muchísimas proyecciones distintas, cada una pensada para minimizar alguno de los tipos de distorsión, o para encontrar un balance.
+La proyección más famosa es la Mercator, WG84 o EPSG 4326, diseñada para asistir la navegación marítima y en uso desde el siglo XVI. Su fuerte es que no distorsiona las direcciones, por lo que permite fijar el rumbo de navegación consultando el mapa. Su principal problema es que produce una distorsión notable en las áreas cercanas a los polos: Groenlandia aparenta el mismo tamaño que toda África, cuando en realidad tiene sólo un quinceavo de su superficie. 
+
+![sistemas de referencias](https://bitsandbricks.github.io/ciencia_de_datos_gente_sociable/imagenes/proyecciones.png)
+
+
+![Mercator - WGS84](https://bitsandbricks.github.io/ciencia_de_datos_gente_sociable/imagenes/mapamundi_mercator.png)
+
+
+Sin embargo, Google la eligió para sus mapas en línea, y por razones de compatibilidad otros proveedores de mapas digitales la adoptaron también. 
+Un problema frecuente en la práctica es tener fuentes de datos geográficos que no podemos comparar con otras, porque desconocemos el sistema de coordenadas que se usó para crearla; es decir, no podemos saber a que posición sobre el planeta corresponde cada observación en los datos.
+
+El WGS 84 (World Geodetic System 1984) es un sistema geodésico de coordenadas geográficas usado mundialmente, que permite localizar cualquier punto de la Tierra (sin necesitar otro de referencia) por medio de tres unidades dadas (x,y,z). WGS 84 son las siglas en inglés de World Geodetic System 84 (que significa Sistema Geodésico Mundial 1984).
+Se trata de un estándar en geodesia, cartografía, y navegación, que data de 1984. Tuvo varias revisiones (la última en 2004), y se considera válido hasta una próxima reunión (aún no definida en la página web oficial de la Agencia de Inteligencia Geoespacial). Se estima un error de cálculo menor a 2 cm, por lo que es en la que se basa el Sistema de Posicionamiento Global (GPS).
+Consiste en un patrón matemático de tres dimensiones que representa la tierra por medio de un elipsoide, un cuerpo geométrico más regular que la Tierra, que se denomina WGS 84 (nótese el espacio). El estudio de este y otros modelos que buscan representar la Tierra se llama Geodesia.
+
+
+## Formatos de archivos
+
+Hay diversos formatos de archivos con información geográfica:
+
+* shapefile: comunmente utilizada, almacena la información en varios archivos.
+* GeoJSON: estándar abierto, mas moderno, solo requiere un archivo de información.
+
+## Geometrías
+
+La información contenida en esos archivos suele estar expresada en geometrías: puntos (posiciones), líneas (recorridos), polígonos (superficies). 
+
+
+
+
+```{r}
+
+library(sf)
+
+mapa_arg <- st_read("provincia/provincia.shp") %>% 
+  filter(nam != "Tierra del Fuego, Antártida e Islas del Atlántico Sur" & nam == "Ciudad Autónoma de Buenos Aires" | nam == "Buenos Aires") 
+
+
+ggplot() +
+  geom_sf(data = mapa_arg)
+
+
+
+
+
+```
+Veamos la información que aparece en consola cuando cargamos estos datos:
+
+Simple feature collection with 23 features and 9 fields: Cargamos una colección de “simple features” (entidades geométricas en la jerga de la cartografía digital) que se traduce como 23 observaciones/filas con15 variables/columnas.
+geometry type: MULTIPOLYGON: los archivos con información geográfica contienen colecciones de puntos, de líneas, o de polígonos. En éste caso son polígonos; tiene sentido para la información que esperamos, que es la de la superficie de Argentina dividida en sus provincias.
+dimension: XY: la información es “plana”, en dos dimensiones X e Y. No incluye información de alturas, que estaría en la dimensión Z. Es lo típico, rara vez trabajaremos con archivos tridimensionales.
+bbox: nos da cuatro valores que forman una “caja” (bounding box), el rectángulo que contiene todos los datos. Estos valores son la latitud mínima, la longitud mínima, la latitud máxima y la longitud máxima del conjunto de datos. Sólo es útil cuando tenemos mucha práctica y ya reconocemos lugares por sus coordenadas.
+geographic CRS: WGS 84 - nuestros datos usan el sistema de coordenadas WGS84, también conocido por su código EPSG 4326. Es el mismo que usan los sistemas GPS, Google Maps, y las aplicaciones de internet en general. Es importante prestar atención al sistemas de coordenadas, o CRS, ya que para comparar datos geográficos de distintas fuentes todas deben usar el mismo.
+
+
+Utilizaremos un tipo de mapas muy popular llamado **coropleta** para visualizar en un mapa cuáles son las provincias con mayor o menor cantidad de puntos wifi.
+
+Los mapas de coropletas muestran áreas geográficas o regiones divididas que están coloreadas, sombreadas o estampadas en relación con una variable. Esto proporciona una forma de visualizar valores sobre un área geográfica, que puede mostrar variaciones o patrones en la ubicación mostrada.
+
+
+```{r}
+
+mapa_wifi <- mapa_arg %>% left_join(wifi_prov_p, by = c("nam" = "provincia"))
+
+
+ggplot() +
+  geom_sf(data = mapa_wifi, aes(fill = puntos_pob))
+
+
+ggplot() +
+  geom_sf(data = mapa_wifi, aes(fill = puntos_pob)) +
+  scale_fill_viridis_c() +
+  theme_void()
+
+
+
+
+```
+
+Es importante aclarar, que se pueden convertir objetos que no vienen en formato geográfico a objetos sf o plotearlos como puntos en ejes cartesianos
+
+```{r}
+
+ggplot() + 
+  geom_sf(data = mapa_wifi) +
+  geom_point(data = wifi %>% filter(latitud < 0), aes(x = longitud, y = latitud))
+
+ggplot() + 
+  geom_sf(data = mapa_wifi, fill = NA) +
+  geom_point(data = wifi %>% filter(latitud < 0), aes(x = longitud, y = latitud), size = 1, color = "blue", alpha = 0.3) +
+  theme_void()
+
+
+```
+Y ahora de la otra manera: convirtiendo un .csv a un objeto geográfico con la función st_as_sf() de la biblioteca sf
+
+```{r}
+wifi_sf <- wifi %>% 
+  st_as_sf(coords = c("longitud", "latitud"), crs = 4326)
+
+ggplot() +
+  geom_sf(data = wifi_sf)
+```
+
+
+¡Podemos probar unir todo dada la lógica de capas! Plotearemos tanto el gráfico de cloropletas que hicimos antes, con la información correspondiente a la ubicación de los Puntos Wifi.
+
+
+```{r}
+
+
+ggplot() +
+  geom_sf(data = mapa_wifi, aes(fill = puntos_pob)) +
+  scale_fill_viridis_c(option = "magma", alpha = 0.4, direction = -1) +
+  geom_sf(data = wifi_sf) +
+  theme_void()
+
+
+```
+
+
+Si quiero geocodificar mis propias direcciones puedo usar la biblioteca RUMBA, desarrollada por Antonio Vázquez Brust utilizando herramientas de USIG, que permite recoger información sobre longitud y latitud para direcciones normalizadas de AMBA
+
+```{r}
+
+library(RUMBA)
+
+##con la biblioteca RUMBA
+direccion_de_interesRUMBA <- USIG_geocode("Uriarte 842, CABA")
+
+## para unir columnas: paste0(columna_calle, columna_numero)
+
+direcciones_donde_vivi <- data %>% RUMBA::mutate_USIG_geocode(direcciones)
+
+
+la1114 <- st_as_sf(data.frame(dire = "VILLA1-11-14", lon = -58.440803, lat = -34.650335), coords = c("lon", "lat")) %>% st_set_crs(4326)
+
+
+library(tmaptools)
+
+##con la biblioteca TMAP
+direccion_de_interes <- geocode_OSM("Uriarte 842, CABA, Argentina")
+direccion_de_interes <- data.frame(dire = direccion_de_interes$query, lon = direccion_de_interes$coords[1], lat = direccion_de_interes$coords[2])
+
+dire <- st_as_sf(direccion_de_interes, coords = c("lon", "lat")) %>% st_set_crs(4326)
+
+
+dire
+
+```
+
+
+
+*** Bonus track ***
+
+Consejos de Edward Tufte para hacer visualizaciones exitosas:
+
+* Lograr que el gráfico haga pensar sobre el contenido que se quiere transmitir y no sobre la herramienta o la mecánica de visualización
+* Integridad en la visualización (ejes por ejemplo)
+* Usar la menor cantidad de "tinta" (colores innecesarios)
+* Evitar en lo posible los graficos de torta ya que el ojo humano parece ser menos sensible a los ángulos que a las alturas, especialmente cuando hay muchas categorías
+* Incluir información sobre lo que se está mostrando, la metodología y la fuente de datos en todos los gráficos
+* Valorizar la elegancia
+
+![Tufte cree que este grafico sobre la marcha de Napoleon a la campaña Rusa es un gran ejemplo de elegancia](https://public-media.interaction-design.org/images/uploads/b68bf43d3c90947460555228d8858beb.jpg)
+
+https://www.interaction-design.org/literature/article/guidelines-for-good-visual-information-representations#:~:text=Tufte%20recommends%20that%20we%20pay,user%20from%20the%20information%20itself.
+
+
+***Recuerden que para probar visualizaciones pueden utilizar las bases de juguete o toybases que vienen en R con la funcion data()***
+

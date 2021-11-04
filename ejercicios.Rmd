@@ -1,0 +1,77 @@
+---
+title: Scraping y análisis de texto
+subtitle: Ejercicios
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: cosmo
+date: "Septiembre de 2020"
+---
+
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=T)
+
+library(tidyverse)
+library(glue)
+
+library(curl)
+library(httr)
+library(rvest)
+```
+
+### Scraping 
+
+1) Extraer los títulos de [los artículos más leídos del diario Perfil](https://www.perfil.com/mas-leidas) en un vector de longitud igual a la cantidad de artículos. No se preocupen si quedan algunos títulos de más o de menos. Pueden usar también cualquier otro sitio que les interese.
+
+```{r}
+titulos = c() 
+### escribi tu codigo aca
+
+###
+```
+
+
+2) Extraer el texto del cuerpo de los primeros 5 artículos de (1) en un vector de longitud 5. Guardar los resultados en un tibble de 3 columnas (titulo, link, texto) y 5 filas. Notas: 
+
+- tal vez necesiten un selector distinto al del ejercicio 1! 
+- chequeen que los links empiecen con "`https://`".
+- usen un selector simple para extraer el texto, no se preocupen si entra "texto de más"
+- guarden los textos en una lista
+
+```{r}
+resultados = tibble()
+### escribi tu codigo aca
+
+###
+```
+
+
+### Texto
+
+1) Extraer en una lista las palabras de los títulos que comienzan con mayúscula (tip: usar `str_extract_all()` y una _regex_ que incluya `[A-Z]`). Usar **todos** los títulos (no solo 5).
+
+```{r}
+titulos_mayusc = list()
+### escribi tu codigo aca
+
+###
+```
+
+2) Crear una matriz de documento-término de tipo `quanteda::dfm()` en la que cada título sea un documento. Aplicar las etapas de preprocesamiento que considere más pertinentes. 
+
+```{r}
+dtm = dfm()
+### escribi tu codigo aca
+
+### escribi tu codigo aca
+```
+
+3) Obtener las palabras más frecuentes del corpus preprocesado.
+
+```{r}
+### escribi tu codigo aca
+
+### escribi tu codigo aca
+```

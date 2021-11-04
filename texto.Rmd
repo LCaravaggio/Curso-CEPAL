@@ -1,0 +1,301 @@
+---
+title: Introducción al análisis de texto
+output:
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: cosmo
+    highlight: tango
+date: "Septiembre de 2020"
+lang: es
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(warning=F, message=F, echo=T)
+
+library(tidyverse)
+library(glue)
+
+library(RVerbalExpressions)
+library(quanteda)
+library(RColorBrewer)
+
+```
+
+## Introducción
+
+Pequeño glosario del Procesamiento del Lenguaje Natural (_Natural Language Processing_ **NLP**): 
+
+* Cada unidad de análisis individual se conoce como **documento**.
+* El conjunto de documentos que analizamos se llama **corpus**.
+* El conjunto de palabras únicas disponibles es el **vocabulario**.
+* Cada palabra particular lleva el nombre de **token**.
+
+Por ejemplo, si trabajamos con artículos de diarios, cada artículo es un documento y el conjunto de artículos es el corpus. Un documento puede tener desde unas pocas palabras (tweets, por ejemplo) hasta miles de oraciones (una novela, por ejemplo).
+
+> Sin lugar a dudas en los últimos años se vio un aumento fenomenal del uso de texto en múltiples tareas de la ciencia de datos, algunas de las cuales son:
+> 
+> - Clasificación de documentos
+> - Sentiment analysis
+> - Topic modeling
+> - Dependencies parsing
+> - Part-of-speech tagging
+> - Language models
+> - Machine translation
+> - Question answering
+
+## Normalización de texto
+
+Todas las aplicaciones de NLP tienen en común que requieren, en mayor o menor medida, que los textos sean **normalizados**, esto es, que sean transformados y llevados a una estructura estándar.
+
+La normalización **siempre** se realiza en función a una tarea particular -- no existe tal cosa como una normalización canónica que sirva para cualquier objetivo. La etapa de normalización también se conoce como etapa de **pre-procesamiento o limpieza**.
+
+Algunas de las tareas de normalización más frecuentes son:
+
+- Conversión de mayúsculas en minúsculas
+- Eliminación de acentos/puntuación/dígitos
+- Eliminación de _stop-words_ (palabras extremademente frecuentes que no aportan significado)
+- Construcción de n-gramas
+- Tokenización de documentos (extracción de tokens de una cadena de caracteres)
+- Stemming (reducción de las palabras a su raíz _cruda_)
+- Lematización (reducción de las palabras a su forma no flexionada)
+
+## Expresiones regulares
+
+Una **expresión regular o _regex_** es una secuencia de caracteres que representa un **patrón de búsqueda** sobre el cual se quiere operar. Por ejemplo, para realizar operaciones sobre los dígitos (como extraerlos, eliminarlos o reemplazarlos), necesitamos poder escribir un patrón que los identifique unívocamente. En general las _regex_ son similares en todos los lenguajes de programación.
+
+Si bien muchas librerías contienen _wrappers_ para las tareas básicas de normalizacón que nos ahorran el uso de _regex_, es fundamental tener un conocimiento mínimo de _regex_ que nos permita hacer ciertas operaciones a medida.
+
+![](img/regex-1.png)
+![](img/regex-2.png)
+![](img/regex-3.png)
+
+Fuente: https://github.com/rstudio/cheatsheets/blob/master/regex.pdf
+
+Veamos cómo podemos combinar las _regex_ con algunas funciones de `stringr` para operar sobre _strings_.  
+
+```{r}
+# leemos datos de notas de diario colombiano el tiempo
+dat = read_csv("notas_eltiempo-2020-09-08.csv", col_types=cols())
+
+head(dat, 2)
+```
+
+
+```{r}
+# agregamos un ID a cada texto
+dat$ID = as.character(1:nrow(dat))
+```
+
+
+```{r}
+```
+
+
+```{r}
+titulos = dat$titulo[1:3]
+cat(titulos, sep="\n")
+```
+
+```{r}
+# cantidad de caracteres
+nchar(titulos) 
+# partir en palabras
+str_split(titulos, "\\s+") 
+# extraer numeros
+str_extract_all(titulos, "[:digit:]+")
+# detectar mayusculas
+str_detect(titulos, "[[:upper:]]")
+# contar patrones
+str_count(titulos, "el")
+# lookarounds
+str_extract_all(titulos, "(?<=el )\\w+") # palabras que siguen a "el"
+# cuantificadores
+str_replace_all(titulos, "\\w{6,}", "###") # palabras de mas de 6 caracteres
+```
+
+Una aclaración importante es que para referirnos a literales que funcionan como regex (por ejemplo, el string "`.`"), necesitamos usar un "escape" para que la regex sepa que nos referimos _literalmente_ a "`.`". En R el string de escape es "`\\`", de modo que para referirnos a un punto necesitamos usar "`\\.`".
+
+Un atajo para construir *regex* es la librería [`RVerbalExpressions`](https://rverbalexpressions.netlify.app/), que nos devuelve la *regex* indicada para los patrones que indicamos con las funciones de la librería. Por ejemplo:
+
+```{r}
+regex_url = rx_start_of_line() %>% 
+  rx_find('http') %>% 
+  rx_maybe('s') %>% 
+  rx_find('://') %>% 
+  rx_maybe('www.') %>% 
+  rx_anything_but(' ') %>% 
+  rx_find('.') %>% 
+  rx_anything_but(' ') %>% 
+  rx_end_of_line()
+
+print(regex_url)
+str_detect("https://www.google.com", regex_url)
+```
+
+Algunas referencias útiles para tener a mano son:  
+
+- [cheatsheet de regex de RStudio](https://github.com/rstudio/cheatsheets/blob/master/regex.pdf)
+- [cheatsheet de strings de RStudio](https://github.com/rstudio/cheatsheets/blob/master/strings.pdf)
+- [documentación de regex de stringr](https://stringr.tidyverse.org/articles/regular-expressions.html)
+- [documentación de operaciones de stringr](https://stringr.tidyverse.org/reference/index.html)
+- GOOGLE !!!
+
+## Bag-of-words
+
+En esta aplicación vamos a hacer un análisis simple de frecuencias de términos en nuestro corpus de noticias. Esta tarea forma de los modelos de tipo **_bag of words_**: cada documento se va a caracterizar por la bolsa de palabras que contiene, de modo tal que podamos indicar para cada palabra del corpus la **frecuencia** de aparición en cada documento. Los pasos de la normalización deben adaptarse entonces a este objetivo.  
+
+![Fuente: https://web.stanford.edu/~jurafsky/slp3/](img/bag-of-words.png)
+
+Esta información se almacena en una matriz de Documento-Término (**_Document-Term Matrix_**) o Término-Documento (**_Term-Document Matrix_**).  
+
+![Fuente: https://datacritics.com/2018/02/21/organizing-your-first-text-mining-project/](img/dtm_tdm.png)
+
+Vamos a usar principalmente la librería `quanteda`, tanto para la normalización de los documentos como el _bag-of-words_. Otras librerías muy populares son `tidytext` y `tm`.  
+
+Veamos en primer lugar las palabras más frecuentes del corpus sin hacer previamente ningún tipo de limpieza:
+
+```{r}
+# matriz de document-feature ( = document-term)
+dfm_notas = dfm(dat$texto)
+# Dframe de feature - frequency
+df_freq = textstat_frequency(dfm_notas, n=30) %>% 
+  mutate(feature = fct_reorder(feature, frequency))
+
+print(head(df_freq))
+
+```
+
+
+```{r }
+# plot
+plt = ggplot(df_freq, aes(x=feature, y=frequency)) +
+  geom_point() +
+  coord_flip() +
+  labs(x = NULL, y = "Frequency") +
+  theme_minimal() +
+  NULL
+
+print( plt )
+
+```
+
+
+Naturalmente los resultados son muy poco interesantes: la mayor parte de las palabras son artículos, preposiciones, pronombres y otros tipos de palabras que no refieren a ninguna característica distintiva del corpus -- es decir, **_stopwords_**. También hay signos de puntuación.   
+
+Pasemos entonces a **normalizar** los documentos y a generar una matriz de documento-término útil:
+
+```{r}
+# corpus de quanteda
+corpus_notas = corpus(dat, text_field="texto", docid_field="ID")
+
+print(summary(corpus_notas, n=5)) #types indica palabras unicas
+```
+
+
+```{r}
+# matriz documento termino
+dfm_notas = corpus_notas %>% 
+  dfm(
+    tolower=T
+    ,remove=stopwords('es')
+    ,remove_punct=T
+    ,remove_numbers=T
+  )
+# plot
+df_freq = textstat_frequency(dfm_notas, n=30) %>% 
+  mutate(feature = fct_reorder(feature, frequency))
+plt = ggplot(df_freq, aes(x=feature, y=frequency)) +
+  geom_point() +
+  coord_flip() +
+  labs(x = NULL, y = "Frequency") +
+  theme_minimal() +
+  NULL
+
+print(plt)
+```
+
+Para tener un control más fino en la definición del vocabulario del corpus, podemos tokenizar los documentos con la función `quanteda::tokens()` antes de armar la matriz de documento-término. De esta manera podemos lograr, por ejemplo, detectar n-gramas frecuentes (**_collocations_**) que contengan stop-words.
+
+Alternativamente se puede usar `dfm_remove` o `dfm_select` para modificar la matriz ya construida.
+
+
+```{r}
+# tokenizamos cada documento
+tokens_notas = tokens(corpus_notas
+                      , remove_punct=T, remove_numbers=T) %>%
+  tokens_tolower() %>% 
+  tokens_ngrams(1:3) %>% 
+  # eliminamos ngrams que empiezan y/o terminan con stopwords
+  tokens_remove(
+    pattern = c(paste0("^",stopwords("es"),"_"), paste0("_",stopwords("es"),"$")) 
+    ,valuetype = "regex"
+  ) %>% 
+  tokens_remove(stopwords("es"))
+
+# matriz documento termino
+dfm_notas = tokens_notas %>% 
+  dfm() %>% 
+  dfm_trim(min_termfreq = 2, verbose = F)
+
+# vocabulario
+vocab = featnames(dfm_notas)
+
+# plot
+df_freq = textstat_frequency(dfm_notas, n=30) %>% 
+  mutate(feature = fct_reorder(feature, frequency))
+plt = ggplot(df_freq, aes(x=feature, y=frequency)) +
+  geom_point() +
+  coord_flip() +
+  labs(x = NULL, y = "Frequency") +
+  theme_minimal() +
+  NULL
+
+print( summary(corpus_notas, n=5) ) #types indica palabras unicas
+print( length(vocab) ) 
+print( plt )
+
+### para ver variables asociadas a los documentos (en este caso solo el titulo)
+# docvars(tokens_notas)
+```
+
+## Visualizaciones
+
+Gráfico de dispersión léxica de un término o patrón clave en cada documento (_keywords in context_):
+
+```{r fig.width=6}
+kwic(tokens_notas, pattern="covid-19") %>%
+    textplot_xray(scale="absolute")
+
+```
+
+Dispersión léxica en un solo documento:
+
+```{r}
+# filtramos tokens y la dfm del doc 3
+dfm_doc3 = dfm_notas["18", ]
+tokens_doc3 = tokens_notas %>% tokens_subset(docnames(.) %in% "18")
+# plot
+plt = textplot_xray(
+    kwic(tokens_doc3, pattern = "muertes"),
+    kwic(tokens_doc3, pattern = "covid-19")
+)
+
+print( plt )
+featfreq(dfm_doc3) %>% sort(decreasing=T) %>% head() # frecuencias del doc
+```
+
+También podemos graficar una nube de palabras para hacer un poco de marketing (sobre todo si le ponemos colores):  
+
+```{r}
+# WordCloud
+set.seed(123)
+textplot_wordcloud(dfm_notas, max_words=100
+                   , color=RColorBrewer::brewer.pal(5, "Set1"))
+
+
+```
+
+## Recursos útiles
+
+- https://tutorials.quanteda.io/
